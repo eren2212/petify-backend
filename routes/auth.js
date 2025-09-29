@@ -15,6 +15,7 @@ var router = express.Router();
  *       required:
  *         - email
  *         - password
+ *         - roleType
  *       properties:
  *         email:
  *           type: string
@@ -24,12 +25,17 @@ var router = express.Router();
  *           type: string
  *           minLength: 6
  *           example: "password123"
+ *         roleType:
+ *           type: string
+ *           enum: [pet_owner, pet_shop, pet_clinic, pet_sitter, pet_hotel]
+ *           example: "pet_owner"
  *     RegisterRequest:
  *       type: object
  *       required:
  *         - email
  *         - password
  *         - fullName
+ *         - roleType
  *       properties:
  *         email:
  *           type: string
@@ -45,6 +51,10 @@ var router = express.Router();
  *         phone:
  *           type: string
  *           example: "+90 555 123 45 67"
+ *         roleType:
+ *           type: string
+ *           enum: [pet_owner, pet_shop, pet_clinic, pet_sitter, pet_hotel]
+ *           example: "pet_owner"
  *     AuthResponse:
  *       type: object
  *       properties:
@@ -101,14 +111,14 @@ var router = express.Router();
  */
 router.post("/register", async function (req, res, next) {
   try {
-    const { email, password, fullName, phone } = req.body;
+    const { email, password, fullName, phone, roleType } = req.body;
 
     // Validation
-    if (!email || !password || !fullName) {
+    if (!email || !password || !fullName || !roleType) {
       throw new CustomError(
         Enum.HTTP_CODES.BAD_REQUEST,
         "Missing required fields",
-        "Email, password, and fullName are required"
+        "Email, password, fullName, and roleType are required"
       );
     }
 
@@ -120,6 +130,22 @@ router.post("/register", async function (req, res, next) {
       );
     }
 
+    // Role validation
+    const validRoles = [
+      "pet_owner",
+      "pet_shop",
+      "pet_clinic",
+      "pet_sitter",
+      "pet_hotel",
+    ];
+    if (!validRoles.includes(roleType)) {
+      throw new CustomError(
+        Enum.HTTP_CODES.BAD_REQUEST,
+        "Invalid role type",
+        "Role must be one of: " + validRoles.join(", ")
+      );
+    }
+
     // Register with Supabase Auth
     const { data, error } = await supabase.auth.signUp({
       email,
@@ -128,7 +154,6 @@ router.post("/register", async function (req, res, next) {
         data: {
           full_name: fullName,
           phone: phone || null,
-          role: "user",
         },
       },
     });
@@ -141,11 +166,61 @@ router.post("/register", async function (req, res, next) {
       );
     }
 
+    // If user created successfully, create user profile and role records
+    if (data.user) {
+      // First create user profile
+      const { error: profileError } = await supabase
+        .from("user_profiles")
+        .insert([
+          {
+            user_id: data.user.id,
+            full_name: fullName,
+            phone_number: phone || null,
+          },
+        ]);
+
+      if (profileError) {
+        console.error("Failed to create user profile:", profileError);
+        throw new CustomError(
+          Enum.HTTP_CODES.INT_SERVER_ERROR,
+          "Profile creation failed",
+          "Failed to create user profile"
+        );
+      }
+
+      // Then create user role record
+      const roleStatus = roleType === "pet_owner" ? "approved" : "pending";
+
+      const { error: roleError } = await supabase.from("user_roles").insert([
+        {
+          user_id: data.user.id,
+          role_type: roleType,
+          status: roleStatus,
+        },
+      ]);
+
+      if (roleError) {
+        console.error("Failed to create user role:", roleError);
+        throw new CustomError(
+          Enum.HTTP_CODES.INT_SERVER_ERROR,
+          "Role creation failed",
+          "Failed to create user role"
+        );
+      }
+    }
+
+    // Create appropriate message based on role status
+    const roleStatus = roleType === "pet_owner" ? "approved" : "pending";
+    const statusMessage =
+      roleStatus === "approved"
+        ? "User registered successfully. You can now login with your credentials."
+        : "User registered successfully. Your account is pending admin approval. Please check your email for verification.";
+
     const response = Response.successResponse(Enum.HTTP_CODES.CREATED, {
       user: data.user,
       session: data.session,
-      message:
-        "User registered successfully. Please check your email for verification.",
+      roleStatus: roleStatus,
+      message: statusMessage,
     });
 
     res.status(response.code).json(response);
@@ -184,13 +259,29 @@ router.post("/register", async function (req, res, next) {
  */
 router.post("/login", async function (req, res, next) {
   try {
-    const { email, password } = req.body;
+    const { email, password, roleType } = req.body;
 
-    if (!email || !password) {
+    if (!email || !password || !roleType) {
       throw new CustomError(
         Enum.HTTP_CODES.BAD_REQUEST,
         "Missing credentials",
-        "Email and password are required"
+        "Email, password, and roleType are required"
+      );
+    }
+
+    // Role validation
+    const validRoles = [
+      "pet_owner",
+      "pet_shop",
+      "pet_clinic",
+      "pet_sitter",
+      "pet_hotel",
+    ];
+    if (!validRoles.includes(roleType)) {
+      throw new CustomError(
+        Enum.HTTP_CODES.BAD_REQUEST,
+        "Invalid role type",
+        "Role must be one of: " + validRoles.join(", ")
       );
     }
 
@@ -207,9 +298,40 @@ router.post("/login", async function (req, res, next) {
       );
     }
 
+    // Check if user has the requested role
+    const { data: userRole, error: roleError } = await supabase
+      .from("user_roles")
+      .select("*")
+      .eq("user_id", data.user.id)
+      .eq("role_type", roleType)
+      .eq("status", "approved")
+      .single();
+
+    if (roleError || !userRole) {
+      // Check if user has the role but it's pending
+      const { data: pendingRole } = await supabase
+        .from("user_roles")
+        .select("*")
+        .eq("user_id", data.user.id)
+        .eq("role_type", roleType)
+        .eq("status", "pending")
+        .single();
+
+      const errorMessage = pendingRole
+        ? `Your ${roleType} role is pending admin approval. Please wait for approval before logging in.`
+        : `You don't have ${roleType} role. Please register with the correct role type.`;
+
+      throw new CustomError(
+        Enum.HTTP_CODES.UNAUTHORIZED,
+        "Access denied",
+        errorMessage
+      );
+    }
+
     const response = Response.successResponse(Enum.HTTP_CODES.OK, {
       user: data.user,
       session: data.session,
+      userRole: userRole,
       message: "Login successful",
     });
 
