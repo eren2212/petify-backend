@@ -166,6 +166,16 @@ router.post("/register", async function (req, res, next) {
       );
     }
 
+    // Supabase may not return an error for existing users (to prevent email enumeration)
+    // Check if user was actually created by verifying if we have a valid user object
+    if (!data.user || !data.user.id) {
+      throw new CustomError(
+        Enum.HTTP_CODES.BAD_REQUEST,
+        "Registration failed",
+        "Unable to create user account. This email may already be registered."
+      );
+    }
+
     // If user created successfully, create user profile and role records
     if (data.user) {
       // First create user profile
@@ -181,6 +191,19 @@ router.post("/register", async function (req, res, next) {
 
       if (profileError) {
         console.error("Failed to create user profile:", profileError);
+
+        // Check if it's a duplicate user error (user already exists)
+        if (
+          profileError.code === "23505" ||
+          profileError.message.includes("duplicate")
+        ) {
+          throw new CustomError(
+            Enum.HTTP_CODES.BAD_REQUEST,
+            "Email already exists",
+            "Zaten bu mail kayıtlı lütfen farklı bir mail adresi deneyiniz."
+          );
+        }
+
         throw new CustomError(
           Enum.HTTP_CODES.INT_SERVER_ERROR,
           "Profile creation failed",
