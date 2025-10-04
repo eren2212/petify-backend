@@ -13,8 +13,8 @@ const verifyToken = async (req, res, next) => {
     if (!authHeader || !authHeader.startsWith("Bearer ")) {
       throw new CustomError(
         Enum.HTTP_CODES.UNAUTHORIZED,
-        "Authentication required",
-        "Please provide a valid Bearer token"
+        "Kimlik doğrulama gerekli",
+        "Lütfen geçerli bir Bearer token sağlayın."
       );
     }
 
@@ -29,8 +29,8 @@ const verifyToken = async (req, res, next) => {
     if (error || !user) {
       throw new CustomError(
         Enum.HTTP_CODES.UNAUTHORIZED,
-        "Invalid or expired token",
-        error?.message || "Token verification failed"
+        "Geçersiz veya süresi dolmuş token",
+        "Oturumunuz sonlanmış. Lütfen tekrar giriş yapın."
       );
     }
 
@@ -81,8 +81,8 @@ const requireRole = (requiredRole) => {
       if (!req.user) {
         throw new CustomError(
           Enum.HTTP_CODES.UNAUTHORIZED,
-          "Authentication required",
-          "Please authenticate first"
+          "Kimlik doğrulama gerekli",
+          "Lütfen önce giriş yapın."
         );
       }
 
@@ -91,8 +91,8 @@ const requireRole = (requiredRole) => {
       if (userRole !== requiredRole && userRole !== "admin") {
         throw new CustomError(
           Enum.HTTP_CODES.FORBIDDEN,
-          "Insufficient permissions",
-          `Required role: ${requiredRole}, current role: ${userRole}`
+          "Yetersiz yetki",
+          `Bu işlem için ${requiredRole} rolüne sahip olmanız gerekiyor. Mevcut rolünüz: ${userRole}`
         );
       }
 
@@ -109,5 +109,3 @@ module.exports = {
   optionalAuth,
   requireRole,
 };
-
-

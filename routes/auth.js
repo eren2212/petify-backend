@@ -117,16 +117,16 @@ router.post("/register", async function (req, res, next) {
     if (!email || !password || !fullName || !roleType) {
       throw new CustomError(
         Enum.HTTP_CODES.BAD_REQUEST,
-        "Missing required fields",
-        "Email, password, fullName, and roleType are required"
+        "Eksik alanlar",
+        "E-posta, şifre, ad soyad ve rol tipi alanları zorunludur."
       );
     }
 
     if (password.length < 6) {
       throw new CustomError(
         Enum.HTTP_CODES.BAD_REQUEST,
-        "Password too short",
-        "Password must be at least 6 characters long"
+        "Şifre çok kısa",
+        "Şifre en az 6 karakter uzunluğunda olmalıdır."
       );
     }
 
@@ -141,8 +141,8 @@ router.post("/register", async function (req, res, next) {
     if (!validRoles.includes(roleType)) {
       throw new CustomError(
         Enum.HTTP_CODES.BAD_REQUEST,
-        "Invalid role type",
-        "Role must be one of: " + validRoles.join(", ")
+        "Geçersiz rol tipi",
+        "Rol tipi şunlardan biri olmalıdır: " + validRoles.join(", ")
       );
     }
 
@@ -159,20 +159,55 @@ router.post("/register", async function (req, res, next) {
     });
 
     if (error) {
+      // Check for specific Supabase error codes
+      let errorMessage =
+        "Kayıt işlemi başarısız oldu. Lütfen tekrar deneyiniz.";
+
+      if (
+        error.message.includes("already registered") ||
+        error.message.includes("already been registered")
+      ) {
+        errorMessage =
+          "Bu e-posta adresi zaten kayıtlı. Lütfen giriş yapmayı deneyin veya şifrenizi sıfırlayın.";
+      } else if (
+        error.message.includes("invalid email") ||
+        error.message.includes("email")
+      ) {
+        errorMessage =
+          "Geçersiz e-posta adresi. Lütfen geçerli bir e-posta adresi giriniz.";
+      } else if (error.message.includes("password")) {
+        errorMessage =
+          "Şifre gereksinimleri karşılanmıyor. Lütfen daha güçlü bir şifre seçiniz.";
+      }
+
       throw new CustomError(
         Enum.HTTP_CODES.BAD_REQUEST,
-        "Registration failed",
-        error.message
+        "Kayıt başarısız",
+        errorMessage
       );
     }
 
-    // Supabase may not return an error for existing users (to prevent email enumeration)
-    // Check if user was actually created by verifying if we have a valid user object
+    // Check if user was actually created or if it's an existing unconfirmed user
     if (!data.user || !data.user.id) {
       throw new CustomError(
         Enum.HTTP_CODES.BAD_REQUEST,
-        "Registration failed",
-        "Unable to create user account. This email may already be registered."
+        "Kayıt başarısız",
+        "Kullanıcı hesabı oluşturulamadı. Bu e-posta adresi zaten kayıtlı olabilir."
+      );
+    }
+
+    // Check if this is an existing user who hasn't confirmed their email
+    // Supabase returns a user but with identities array empty for unconfirmed re-registrations
+    if (
+      data.user &&
+      data.user.identities &&
+      data.user.identities.length === 0
+    ) {
+      // User exists but hasn't confirmed their email
+      throw new CustomError(
+        Enum.HTTP_CODES.BAD_REQUEST,
+        "E-posta onayı bekleniyor",
+        "Bu e-posta adresiyle daha önce kayıt olunmuş ancak e-posta onaylanmamış. Lütfen e-posta adresinizi kontrol ederek hesabınızı onaylayın. Onay e-postası tekrar gönderildi."
       );
     }
 
@@ -199,15 +234,15 @@ router.post("/register", async function (req, res, next) {
         ) {
           throw new CustomError(
             Enum.HTTP_CODES.BAD_REQUEST,
-            "Email already exists",
-            "Zaten bu mail kayıtlı lütfen farklı bir mail adresi deneyiniz."
+            "E-posta zaten kayıtlı",
+            "Bu e-posta adresi zaten kayıtlı. Lütfen farklı bir e-posta adresi deneyiniz."
           );
         }
 
         throw new CustomError(
           Enum.HTTP_CODES.INT_SERVER_ERROR,
-          "Profile creation failed",
-          "Failed to create user profile"
+          "Profil oluşturma başarısız",
+          "Kullanıcı profili oluşturulurken bir hata oluştu. Lütfen tekrar deneyiniz."
         );
       }
 
@@ -226,8 +261,8 @@ router.post("/register", async function (req, res, next) {
         console.error("Failed to create user role:", roleError);
         throw new CustomError(
           Enum.HTTP_CODES.INT_SERVER_ERROR,
-          "Role creation failed",
-          "Failed to create user role"
+          "Rol oluşturma başarısız",
+          "Kullanıcı rolü oluşturulurken bir hata oluştu. Lütfen tekrar deneyiniz."
         );
       }
     }
@@ -236,8 +271,8 @@ router.post("/register", async function (req, res, next) {
     const roleStatus = roleType === "pet_owner" ? "approved" : "pending";
     const statusMessage =
       roleStatus === "approved"
-        ? "User registered successfully. You can now login with your credentials."
-        : "User registered successfully. Your account is pending admin approval. Please check your email for verification.";
+        ? "Kayıt başarılı! Artık giriş yapabilirsiniz."
+        : "Kayıt başarılı! Hesabınız yönetici onayı bekliyor. Lütfen e-posta adresinizi kontrol ederek hesabınızı onaylayın.";
 
     const response = Response.successResponse(Enum.HTTP_CODES.CREATED, {
       user: data.user,
@@ -287,8 +322,8 @@ router.post("/login", async function (req, res, next) {
     if (!email || !password || !roleType) {
       throw new CustomError(
         Enum.HTTP_CODES.BAD_REQUEST,
-        "Missing credentials",
-        "Email, password, and roleType are required"
+        "Eksik bilgiler",
+        "E-posta, şifre ve rol tipi alanları zorunludur."
       );
     }
 
@@ -303,8 +338,8 @@ router.post("/login", async function (req, res, next) {
     if (!validRoles.includes(roleType)) {
       throw new CustomError(
         Enum.HTTP_CODES.BAD_REQUEST,
-        "Invalid role type",
-        "Role must be one of: " + validRoles.join(", ")
+        "Geçersiz rol tipi",
+        "Rol tipi şunlardan biri olmalıdır: " + validRoles.join(", ")
       );
     }
 
@@ -314,10 +349,27 @@ router.post("/login", async function (req, res, next) {
     });
 
     if (error) {
+      // Handle specific login errors with Turkish messages
+      let errorMessage =
+        "Giriş başarısız. Lütfen bilgilerinizi kontrol ediniz.";
+
+      if (
+        error.message.includes("Invalid login credentials") ||
+        error.message.includes("Invalid")
+      ) {
+        errorMessage = "E-posta veya şifre hatalı. Lütfen tekrar deneyiniz.";
+      } else if (error.message.includes("Email not confirmed")) {
+        errorMessage =
+          "E-posta adresiniz henüz onaylanmamış. Lütfen e-posta adresinizi kontrol ederek hesabınızı onaylayın.";
+      } else if (error.message.includes("User not found")) {
+        errorMessage =
+          "Bu e-posta adresiyle kayıtlı bir kullanıcı bulunamadı. Lütfen önce kayıt olun.";
+      }
+
       throw new CustomError(
         Enum.HTTP_CODES.UNAUTHORIZED,
-        "Login failed",
-        error.message
+        "Giriş başarısız",
+        errorMessage
       );
     }
 
@@ -340,13 +392,23 @@ router.post("/login", async function (req, res, next) {
         .eq("status", "pending")
         .single();
 
+      const roleNames = {
+        pet_owner: "Evcil Hayvan Sahibi",
+        pet_shop: "Pet Shop",
+        pet_clinic: "Veteriner Kliniği",
+        pet_sitter: "Evcil Hayvan Bakıcısı",
+        pet_hotel: "Evcil Hayvan Oteli",
+      };
+
+      const roleName = roleNames[roleType] || roleType;
+
       const errorMessage = pendingRole
-        ? `Your ${roleType} role is pending admin approval. Please wait for approval before logging in.`
-        : `You don't have ${roleType} role. Please register with the correct role type.`;
+        ? `${roleName} rolünüz yönetici onayı bekliyor. Hesabınız onaylandıktan sonra giriş yapabilirsiniz.`
+        : `${roleName} rolüne sahip değilsiniz. Lütfen doğru rol tipiyle kayıt olun veya farklı bir rol seçin.`;
 
       throw new CustomError(
         Enum.HTTP_CODES.UNAUTHORIZED,
-        "Access denied",
+        "Erişim reddedildi",
         errorMessage
       );
     }
@@ -355,7 +417,7 @@ router.post("/login", async function (req, res, next) {
       user: data.user,
       session: data.session,
       userRole: userRole,
-      message: "Login successful",
+      message: "Giriş başarılı!",
     });
 
     res.status(response.code).json(response);
@@ -389,13 +451,13 @@ router.post("/logout", verifyToken, async function (req, res, next) {
     if (error) {
       throw new CustomError(
         Enum.HTTP_CODES.INT_SERVER_ERROR,
-        "Logout failed",
-        error.message
+        "Çıkış başarısız",
+        "Çıkış yapılırken bir hata oluştu. Lütfen tekrar deneyiniz."
       );
     }
 
     const response = Response.successResponse(Enum.HTTP_CODES.OK, {
-      message: "Logout successful",
+      message: "Çıkış başarılı!",
     });
 
     res.status(response.code).json(response);
@@ -432,7 +494,7 @@ router.get("/me", verifyToken, function (req, res, next) {
   try {
     const response = Response.successResponse(Enum.HTTP_CODES.OK, {
       user: req.user,
-      message: "User information retrieved successfully",
+      message: "Kullanıcı bilgileri başarıyla alındı.",
     });
 
     res.status(response.code).json(response);
@@ -475,8 +537,8 @@ router.post("/refresh", async function (req, res, next) {
     if (!refresh_token) {
       throw new CustomError(
         Enum.HTTP_CODES.BAD_REQUEST,
-        "Refresh token required",
-        "Please provide a valid refresh token"
+        "Token gerekli",
+        "Lütfen geçerli bir yenileme token'ı sağlayın."
       );
     }
 
@@ -485,17 +547,27 @@ router.post("/refresh", async function (req, res, next) {
     });
 
     if (error) {
+      let errorMessage =
+        "Token yenileme başarısız oldu. Lütfen tekrar giriş yapın.";
+
+      if (
+        error.message.includes("Invalid Refresh Token") ||
+        error.message.includes("expired")
+      ) {
+        errorMessage = "Oturum süreniz dolmuş. Lütfen tekrar giriş yapın.";
+      }
+
       throw new CustomError(
         Enum.HTTP_CODES.UNAUTHORIZED,
-        "Token refresh failed",
-        error.message
+        "Token yenileme başarısız",
+        errorMessage
       );
     }
 
     const response = Response.successResponse(Enum.HTTP_CODES.OK, {
       user: data.user,
       session: data.session,
-      message: "Token refreshed successfully",
+      message: "Token başarıyla yenilendi.",
     });
 
     res.status(response.code).json(response);
