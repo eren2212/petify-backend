@@ -218,4 +218,127 @@ router.get("/avatar/:filename", async (req, res) => {
   }
 });
 
+/**
+ * @route PUT /profile/information
+ * @desc Profil bilgilerini güncelle
+ * @access Private
+ */
+router.put("/information", verifyToken, async (req, res) => {
+  try {
+    const { full_name, phone_number } = req.body;
+    const userId = req.user.id; // Authenticated user'dan al
+
+    // Input validation
+    if (!full_name && !phone_number) {
+      throw new CustomError(
+        Enum.HTTP_CODES.BAD_REQUEST,
+        "En az bir alan doldurulmalıdır",
+        "full_name veya phone_number gerekli"
+      );
+    }
+
+    // Sadece gönderilen alanları update et
+    const updateData = {};
+    if (full_name) updateData.full_name = full_name;
+    if (phone_number) updateData.phone_number = phone_number;
+
+    const { data, error } = await supabase
+      .from("user_profiles")
+      .update(updateData)
+      .eq("user_id", userId)
+      .select()
+      .single();
+
+    if (error) {
+      throw new CustomError(
+        Enum.HTTP_CODES.INT_SERVER_ERROR,
+        "Profil bilgileriniz güncellenemedi",
+        error.message
+      );
+    }
+
+    const successResponse = Response.successResponse(Enum.HTTP_CODES.OK, {
+      message: "Profil başarılı bir şekilde güncellendi",
+      profile: data,
+    });
+    res.status(successResponse.code).json(successResponse);
+  } catch (error) {
+    const errorResponse = Response.errorResponse(error);
+    res.status(errorResponse.code).json(errorResponse);
+  }
+});
+
+/**
+ * @route DELETE /profile/avatar
+ * @desc Avatarı silme işlemi
+ * @access Private
+ */
+router.delete("/avatar", verifyToken, async (req, res) => {
+  try {
+    const userId = req.user.id;
+
+    // 1. Mevcut avatar_url'i database'den al
+    const { data: userProfile, error: fetchError } = await supabase
+      .from("user_profiles")
+      .select("avatar_url")
+      .eq("user_id", userId)
+      .single();
+
+    if (fetchError) {
+      throw new CustomError(
+        Enum.HTTP_CODES.INT_SERVER_ERROR,
+        "Profil bilgisi alınamadı",
+        fetchError.message
+      );
+    }
+
+    // 2. Avatar yoksa hata ver
+    if (!userProfile.avatar_url) {
+      throw new CustomError(
+        Enum.HTTP_CODES.BAD_REQUEST,
+        "Silinecek avatar bulunamadı",
+        "Kullanıcının avatar resmi bulunmuyor"
+      );
+    }
+
+    const avatarPath = userProfile.avatar_url;
+
+    // 3. Storage'dan sil
+    const { error: storageError } = await supabase.storage
+      .from("avatars")
+      .remove([avatarPath]);
+
+    if (storageError) {
+      console.error("Avatar storage'dan silinemedi:", storageError);
+      // Devam et, kritik değil (dosya zaten silinmiş olabilir)
+    }
+
+    // 4. Database'de avatar_url'i null yap
+    const { data: updatedProfile, error: updateError } = await supabase
+      .from("user_profiles")
+      .update({ avatar_url: null })
+      .eq("user_id", userId)
+      .select()
+      .single();
+
+    if (updateError) {
+      throw new CustomError(
+        Enum.HTTP_CODES.INT_SERVER_ERROR,
+        "Avatar bilgisi silinemedi",
+        updateError.message
+      );
+    }
+
+    const successResponse = Response.successResponse(Enum.HTTP_CODES.OK, {
+      message: "Avatar başarıyla silindi",
+      profile: updatedProfile,
+    });
+
+    res.status(successResponse.code).json(successResponse);
+  } catch (error) {
+    const errorResponse = Response.errorResponse(error);
+    res.status(errorResponse.code).json(errorResponse);
+  }
+});
+
 module.exports = router;
