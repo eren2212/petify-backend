@@ -494,8 +494,8 @@ router.get("/me", verifyToken, async function (req, res, next) {
   try {
     const userId = req.user.id;
 
-    // Get user roles from database
-    const { data: userRoles, error: rolesError } = await supabase
+    // Kullanıcının rol bilgilerini çek
+    const { data: roles, error: rolesError } = await supabase
       .from("user_roles")
       .select("*")
       .eq("user_id", userId);
@@ -504,8 +504,8 @@ router.get("/me", verifyToken, async function (req, res, next) {
       console.error("Failed to fetch user roles:", rolesError);
     }
 
-    // Get user profile from database
-    const { data: userProfile, error: profileError } = await supabase
+    // Kullanıcının profil bilgilerini çek
+    const { data: profile, error: profileError } = await supabase
       .from("user_profiles")
       .select("*")
       .eq("user_id", userId)
@@ -515,15 +515,15 @@ router.get("/me", verifyToken, async function (req, res, next) {
       console.error("Failed to fetch user profile:", profileError);
     }
 
-    // Combine user data with roles and profile
-    const userData = {
+    // User objesine roles ve profile ekle
+    const userWithDetails = {
       ...req.user,
-      roles: userRoles || [],
-      profile: userProfile || null,
+      roles: roles || [],
+      profile: profile || null,
     };
 
     const response = Response.successResponse(Enum.HTTP_CODES.OK, {
-      user: userData,
+      user: userWithDetails,
       message: "Kullanıcı bilgileri başarıyla alındı.",
     });
 
