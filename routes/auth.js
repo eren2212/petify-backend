@@ -490,10 +490,40 @@ router.post("/logout", verifyToken, async function (req, res, next) {
  *             schema:
  *               $ref: '#/components/schemas/Error'
  */
-router.get("/me", verifyToken, function (req, res, next) {
+router.get("/me", verifyToken, async function (req, res, next) {
   try {
+    const userId = req.user.id;
+
+    // Kullanıcının rol bilgilerini çek
+    const { data: roles, error: rolesError } = await supabase
+      .from("user_roles")
+      .select("*")
+      .eq("user_id", userId);
+
+    if (rolesError) {
+      console.error("Failed to fetch user roles:", rolesError);
+    }
+
+    // Kullanıcının profil bilgilerini çek
+    const { data: profile, error: profileError } = await supabase
+      .from("user_profiles")
+      .select("*")
+      .eq("user_id", userId)
+      .single();
+
+    if (profileError) {
+      console.error("Failed to fetch user profile:", profileError);
+    }
+
+    // User objesine roles ve profile ekle
+    const userWithDetails = {
+      ...req.user,
+      roles: roles || [],
+      profile: profile || null,
+    };
+
     const response = Response.successResponse(Enum.HTTP_CODES.OK, {
-      user: req.user,
+      user: userWithDetails,
       message: "Kullanıcı bilgileri başarıyla alındı.",
     });
 
