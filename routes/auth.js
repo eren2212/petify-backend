@@ -472,7 +472,7 @@ router.post("/logout", verifyToken, async function (req, res, next) {
  * /auth/me:
  *   get:
  *     summary: Get current user
- *     description: Get the authenticated user's information
+ *     description: Get the authenticated user's information with roles and profile
  *     tags: [Authentication]
  *     security:
  *       - bearerAuth: []
@@ -490,10 +490,40 @@ router.post("/logout", verifyToken, async function (req, res, next) {
  *             schema:
  *               $ref: '#/components/schemas/Error'
  */
-router.get("/me", verifyToken, function (req, res, next) {
+router.get("/me", verifyToken, async function (req, res, next) {
   try {
+    const userId = req.user.id;
+
+    // Get user roles from database
+    const { data: userRoles, error: rolesError } = await supabase
+      .from("user_roles")
+      .select("*")
+      .eq("user_id", userId);
+
+    if (rolesError) {
+      console.error("Failed to fetch user roles:", rolesError);
+    }
+
+    // Get user profile from database
+    const { data: userProfile, error: profileError } = await supabase
+      .from("user_profiles")
+      .select("*")
+      .eq("user_id", userId)
+      .single();
+
+    if (profileError) {
+      console.error("Failed to fetch user profile:", profileError);
+    }
+
+    // Combine user data with roles and profile
+    const userData = {
+      ...req.user,
+      roles: userRoles || [],
+      profile: userProfile || null,
+    };
+
     const response = Response.successResponse(Enum.HTTP_CODES.OK, {
-      user: req.user,
+      user: userData,
       message: "Kullanıcı bilgileri başarıyla alındı.",
     });
 
