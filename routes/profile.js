@@ -356,4 +356,181 @@ router.delete("/avatar", verifyToken, async (req, res) => {
   }
 });
 
+/**
+ * @route POST /profile/pet/add
+ * @desc Profile hayvan ekleme
+ * @access Private
+ */
+
+router.post("/pet/add", verifyToken, async (req, res) => {
+  const {
+    pet_type_id,
+    name,
+    breed,
+    age_years,
+    age_months,
+    gender,
+    weight_kg,
+    color,
+    description,
+  } = req.body;
+
+  const userId = req.user.id;
+
+  try {
+    const newPet = {
+      user_id: userId,
+      pet_type_id,
+      name,
+      breed,
+      age_years,
+      age_months,
+      gender,
+      weight_kg,
+      color,
+      description,
+    };
+    const { data: petFormData, error: petFormError } = await supabase
+      .from("pets")
+      .insert(newPet)
+      .select()
+      .single();
+
+    if (petFormError) {
+      throw new CustomError(
+        Enum.HTTP_CODES.BAD_REQUEST,
+        "Yeni hayvan eklenemedi",
+        petFormError.message
+      );
+    }
+
+    const successResponse = Response.successResponse(Enum.HTTP_CODES.OK, {
+      message: "Başarılı bir şekilde hayvan kayıt edildi",
+      pet: petFormData,
+    });
+
+    res.status(successResponse.code).json(successResponse);
+  } catch (error) {
+    const errorResponse = Response.errorResponse(error);
+    res.status(errorResponse.code).json(errorResponse);
+  }
+});
+
+/**
+ * @route GET /profile/pet
+ * @desc Profile hayvanları görüntüleme
+ * @access Private
+ */
+
+router.get("/pet", verifyToken, async (req, res) => {
+  const userId = req.user.id;
+
+  try {
+    if (!userId) {
+      throw new CustomError(
+        Enum.HTTP_CODES.BAD_REQUEST,
+        "User id bulunamadı",
+        "user id gerekli"
+      );
+    }
+
+    const { data, error } = await supabase
+      .from("pets")
+      .select("*")
+      .eq("user_id", userId);
+
+    if (error) {
+      throw new CustomError(
+        Enum.HTTP_CODES.BAD_REQUEST,
+        "Hayvanlar görüntülenemedi",
+        error.message
+      );
+    }
+
+    const successResponse = Response.successResponse(Enum.HTTP_CODES.OK, {
+      message: "Başarılı bir şekilde görüntülendi",
+      pets: data,
+    });
+
+    res.status(successResponse.code).json(successResponse);
+  } catch (error) {
+    const errorResponse = Response.errorResponse(error);
+    res.status(errorResponse.code).json(errorResponse);
+  }
+});
+
+/**
+ * @route POST /profile/pet/vaccination
+ * @desc Pet aşılama bilgisi ekleme
+ * @access Private
+ */
+
+router.post("/pet/vaccination", verifyToken, async (req, res) => {
+  const {
+    pet_id,
+    vaccine_name,
+    vaccination_date,
+    next_due_date,
+    veterinarian_name,
+    clinic_name,
+    batch_number,
+    notes,
+  } = req.body;
+
+  const userId = req.user.id;
+
+  try {
+    // Pet'in bu kullanıcıya ait olup olmadığını kontrol et
+    const { data: petData, error: petError } = await supabase
+      .from("pets")
+      .select("id")
+      .eq("id", pet_id)
+      .eq("user_id", userId)
+      .single();
+
+    if (petError || !petData) {
+      throw new CustomError(
+        Enum.HTTP_CODES.BAD_REQUEST,
+        "Pet bulunamadı",
+        "Bu pet size ait değil veya mevcut değil"
+      );
+    }
+
+    const newVaccination = {
+      pet_id,
+      vaccine_name,
+      vaccination_date,
+      next_due_date,
+      veterinarian_name,
+      clinic_name,
+      batch_number,
+      notes,
+    };
+
+    const { data, error } = await supabase
+      .from("pet_vaccinations")
+      .insert(newVaccination)
+      .select()
+      .single();
+
+    if (error) {
+      throw new CustomError(
+        Enum.HTTP_CODES.BAD_REQUEST,
+        "Yeni aşılama bilgileri kaydedilemedi",
+        error.message
+      );
+    }
+
+    const successResponse = Response.successResponse(Enum.HTTP_CODES.OK, {
+      message: "Aşılama bilgisi başarıyla kaydedildi",
+      vaccination: data,
+    });
+
+    res.status(successResponse.code).json(successResponse);
+  } catch (error) {
+    const errorResponse = Response.errorResponse(error);
+    res.status(errorResponse.code).json(errorResponse);
+  }
+});
+
 module.exports = router;
