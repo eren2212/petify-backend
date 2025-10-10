@@ -242,6 +242,21 @@ router.put("/information", verifyToken, async (req, res) => {
     if (full_name) updateData.full_name = full_name;
     if (phone_number) updateData.phone_number = phone_number;
 
+    const { data: displayNameData, displayNameerror } =
+      await supabase.auth.updateUser({
+        data: {
+          display_name: full_name,
+        },
+      });
+
+    if (displayNameerror) {
+      throw new CustomError(
+        Enum.HTTP_CODES.BAD_REQUEST,
+        "Display name güncellenemedi",
+        displayNameerror.message
+      );
+    }
+
     const { data, error } = await supabase
       .from("user_profiles")
       .update(updateData)
