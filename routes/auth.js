@@ -472,7 +472,7 @@ router.post("/logout", verifyToken, async function (req, res, next) {
  * /auth/me:
  *   get:
  *     summary: Get current user
- *     description: Get the authenticated user's information
+ *     description: Get the authenticated user's information with roles and profile
  *     tags: [Authentication]
  *     security:
  *       - bearerAuth: []
