@@ -436,7 +436,12 @@ router.get("/pet", verifyToken, async (req, res) => {
 
     const { data, error } = await supabase
       .from("pets")
-      .select("*")
+      .select(
+        `
+        *,
+        pet_type:pet_types(id, name, name_tr)
+      `
+      )
       .eq("user_id", userId);
 
     if (error) {
