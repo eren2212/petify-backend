@@ -40,12 +40,14 @@ router.get("/types", async (req, res) => {
   }
 });
 /**
- * @route GET /pet/my/:id
+ * @route GET /pet/my/:id?age_format=auto|years|months|days
  * @desc Profildeki hayvanların detay sayfasını getir
  * @access Private
+ * @param {string} age_format - Yaş formatı: auto (otomatik), years (yıl), months (ay), days (gün)
  */
 router.get("/my/:id", verifyToken, async (req, res) => {
   const { id } = req.params;
+  const { age_format = "auto" } = req.query; // Default olarak otomatik
   const userId = req.user.id;
 
   try {
@@ -61,33 +63,95 @@ router.get("/my/:id", verifyToken, async (req, res) => {
       .eq("id", id)
       .single();
 
-    // Yaş hesaplama fonksiyonu
-    const calculateAge = (birthdate) => {
-      if (!birthdate) return null;
+    // Gelişmiş yaş hesaplama fonksiyonu
+    const calculatePetAge = (birthdate, format = "auto") => {
+      if (!birthdate) return { age: null, unit: null, display: null };
 
       const today = new Date();
       const birth = new Date(birthdate);
 
-      let age = today.getFullYear() - birth.getFullYear();
+      // Geçersiz tarih kontrolü
+      if (birth > today)
+        return { age: null, unit: null, display: "Geçersiz tarih" };
+
+      // Yıl cinsinden yaş hesaplama
+      let years = today.getFullYear() - birth.getFullYear();
       const monthDiff = today.getMonth() - birth.getMonth();
 
-      // Eğer doğum günü henüz gelmemişse yaştan 1 çıkar
       if (
         monthDiff < 0 ||
         (monthDiff === 0 && today.getDate() < birth.getDate())
       ) {
-        age--;
+        years--;
       }
 
-      return age;
+      // Ay cinsinden yaş hesaplama
+      let months = (today.getFullYear() - birth.getFullYear()) * 12;
+      months += today.getMonth() - birth.getMonth();
+
+      if (today.getDate() < birth.getDate()) {
+        months--;
+      }
+
+      // Gün cinsinden yaş hesaplama
+      const timeDiff = today.getTime() - birth.getTime();
+      const days = Math.floor(timeDiff / (1000 * 3600 * 24));
+
+      // Format belirleme
+      switch (format) {
+        case "years":
+          return {
+            age: Math.max(0, years),
+            unit: "years",
+            display: `${Math.max(0, years)} yaş`,
+          };
+
+        case "months":
+          return {
+            age: Math.max(0, months),
+            unit: "months",
+            display: `${Math.max(0, months)} aylık`,
+          };
+
+        case "days":
+          return {
+            age: Math.max(0, days),
+            unit: "days",
+            display: `${Math.max(0, days)} günlük`,
+          };
+
+        case "auto":
+        default:
+          // Otomatik format seçimi
+          if (years >= 1) {
+            return {
+              age: years,
+              unit: "years",
+              display: `${years} yaş`,
+            };
+          } else if (months >= 1) {
+            return {
+              age: months,
+              unit: "months",
+              display: `${months} Aylık`,
+            };
+          } else {
+            return {
+              age: days,
+              unit: "days",
+              display: `${days} Günlük`,
+            };
+          }
+      }
     };
 
-    // Hayvanın yaşını hesapla
-    let petAge = null;
+    // Hayvanın yaş bilgisini hesapla
+    let ageInfo = { age: null, unit: null, display: null };
     if (data.birthdate) {
-      petAge = calculateAge(data.birthdate);
+      ageInfo = calculatePetAge(data.birthdate, age_format);
     }
-    console.log(petAge);
+
+    console.log("Pet age info:", ageInfo);
 
     if (error) {
       throw new CustomError(
@@ -108,7 +172,10 @@ router.get("/my/:id", verifyToken, async (req, res) => {
       message: "Detay sayfası başarılı bir şekilde geldi.",
       pet: {
         ...data,
-        age: petAge,
+        age: ageInfo.age,
+        age_unit: ageInfo.unit,
+        age_display: ageInfo.display,
+        age_format_used: age_format,
       },
     });
 
