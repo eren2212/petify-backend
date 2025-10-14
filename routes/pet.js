@@ -39,5 +39,53 @@ router.get("/types", async (req, res) => {
     res.status(errorResponse.code).json(errorResponse);
   }
 });
+/**
+ * @route GET /pet/my/:id
+ * @desc Profildeki hayvanların detay sayfasını getir
+ * @access Private
+ */
+router.get("/my/:id", verifyToken, async (req, res) => {
+  const { id } = req.params;
+  const userId = req.user.id;
+
+  try {
+    const { data, error } = await supabase
+      .from("pets")
+      .select(
+        `
+        *,
+        pet_type:pet_types(id, name, name_tr)
+      `
+      )
+      .eq("user_id", userId)
+      .eq("id", id)
+      .single();
+
+    if (error) {
+      throw new CustomError(
+        Enum.HTTP_CODES.BAD_REQUEST,
+        "Detay sayfası görüntülenirken database sorgusunda bir hata geldi",
+        error.message
+      );
+    }
+
+    if (!data) {
+      throw new CustomError(
+        Enum.HTTP_CODES.NOT_FOUND,
+        "Bu ID ile eşleşen hayvan bulunamadı"
+      );
+    }
+
+    const successResponse = Response.successResponse(Enum.HTTP_CODES.OK, {
+      message: "Detay sayfası başarılı bir şekilde geldi.",
+      pet: data,
+    });
+
+    res.status(successResponse.code).json(successResponse);
+  } catch (error) {
+    const errorResponse = Response.errorResponse(error);
+    res.status(errorResponse.code).json(errorResponse);
+  }
+});
 
 module.exports = router;
