@@ -61,6 +61,34 @@ router.get("/my/:id", verifyToken, async (req, res) => {
       .eq("id", id)
       .single();
 
+    // Yaş hesaplama fonksiyonu
+    const calculateAge = (birthdate) => {
+      if (!birthdate) return null;
+
+      const today = new Date();
+      const birth = new Date(birthdate);
+
+      let age = today.getFullYear() - birth.getFullYear();
+      const monthDiff = today.getMonth() - birth.getMonth();
+
+      // Eğer doğum günü henüz gelmemişse yaştan 1 çıkar
+      if (
+        monthDiff < 0 ||
+        (monthDiff === 0 && today.getDate() < birth.getDate())
+      ) {
+        age--;
+      }
+
+      return age;
+    };
+
+    // Hayvanın yaşını hesapla
+    let petAge = null;
+    if (data.birthdate) {
+      petAge = calculateAge(data.birthdate);
+    }
+    console.log(petAge);
+
     if (error) {
       throw new CustomError(
         Enum.HTTP_CODES.BAD_REQUEST,
@@ -78,12 +106,36 @@ router.get("/my/:id", verifyToken, async (req, res) => {
 
     const successResponse = Response.successResponse(Enum.HTTP_CODES.OK, {
       message: "Detay sayfası başarılı bir şekilde geldi.",
-      pet: data,
+      pet: {
+        ...data,
+        age: petAge,
+      },
     });
 
     res.status(successResponse.code).json(successResponse);
   } catch (error) {
     const errorResponse = Response.errorResponse(error);
+    res.status(errorResponse.code).json(errorResponse);
+  }
+});
+
+/**
+ * @route PUT /pet/my/:id
+ * @desc Profildeki hayvanların detay sayfasını getir
+ * @access Private
+ */
+
+router.put("/my/:id", async (req, res) => {
+  const userId = req.user.id;
+
+  try {
+  } catch (error) {
+    const errorResponse = Response.errorResponse(
+      Enum.HTTP_CODES.INT_SERVER_ERROR,
+      "Hayvan bilgilerini düzenleme sırasında bilinmeyen bir hata oluştu",
+      error.message
+    );
+
     res.status(errorResponse.code).json(errorResponse);
   }
 });
