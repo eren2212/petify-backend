@@ -503,25 +503,47 @@ router.post(
         );
       }
 
-      // 2. Mevcut resim sayısını kontrol et ve sıralama için kullan
-      const { data: existingImages, error: countError } = await supabase
-        .from("profile_images")
-        .select("image_order")
-        .eq("profile_type", "pet")
-        .eq("profile_id", petId)
-        .eq("is_active", true)
-        .order("image_order", { ascending: false })
-        .limit(1);
+      // 2. Mevcut profil resmini kontrol et (image_order = 1)
+      const { data: existingProfileImage, error: existingError } =
+        await supabase
+          .from("profile_images")
+          .select("*")
+          .eq("profile_type", "pet")
+          .eq("profile_id", petId)
+          .eq("image_order", 1)
+          .eq("is_active", true)
+          .single();
 
-      if (countError) {
-        console.error("Resim sayısı alınamadı:", countError);
+      // Eski profil resmi varsa sil (storage + database)
+      if (existingProfileImage && !existingError) {
+        // Storage'dan eski resmi sil
+        const oldFileName = existingProfileImage.image_url;
+        const { error: storageDeleteError } = await supabase.storage
+          .from("mypets")
+          .remove([oldFileName]);
+
+        if (storageDeleteError) {
+          console.error(
+            "Eski resim storage'dan silinemedi:",
+            storageDeleteError
+          );
+          // Devam et, kritik değil
+        }
+
+        // Database'den eski resmi sil
+        const { error: dbDeleteError } = await supabase
+          .from("profile_images")
+          .delete()
+          .eq("id", existingProfileImage.id);
+
+        if (dbDeleteError) {
+          console.error("Eski resim database'den silinemedi:", dbDeleteError);
+          // Devam et, kritik değil
+        }
       }
 
-      // Yeni resmin sırası
-      const nextOrder =
-        existingImages && existingImages.length > 0
-          ? existingImages[0].image_order + 1
-          : 1;
+      // Yeni resim her zaman image_order = 1 olacak (profil resmi)
+      const nextOrder = 1;
 
       // 3. Dosya adı oluştur (unique)
       const timestamp = Date.now();
