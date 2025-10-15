@@ -188,21 +188,70 @@ router.get("/my/:id", verifyToken, async (req, res) => {
 
 /**
  * @route PUT /pet/my/:id
- * @desc Profildeki hayvanların detay sayfasını getir
+ * @desc Hayvan bilgilerini güncelle
  * @access Private
  */
-
-router.put("/my/:id", async (req, res) => {
+router.put("/my/:id", verifyToken, async (req, res) => {
   const userId = req.user.id;
+  const { id } = req.params;
+  const { name, weight_kg, description } = req.body;
 
   try {
-  } catch (error) {
-    const errorResponse = Response.errorResponse(
-      Enum.HTTP_CODES.INT_SERVER_ERROR,
-      "Hayvan bilgilerini düzenleme sırasında bilinmeyen bir hata oluştu",
-      error.message
-    );
+    // Input validation
+    if (!name || name.trim() === "") {
+      throw new CustomError(
+        Enum.HTTP_CODES.BAD_REQUEST,
+        "Hayvan adı boş olamaz"
+      );
+    }
 
+    // Hayvanın kullanıcıya ait olup olmadığını kontrol et
+    const { data: petData, error: petError } = await supabase
+      .from("pets")
+      .select("id, name")
+      .eq("id", id)
+      .eq("user_id", userId)
+      .single();
+
+    if (!petData || petError) {
+      throw new CustomError(
+        Enum.HTTP_CODES.NOT_FOUND,
+        "Bu kullanıcıya ait böyle bir hayvan bulunmamaktadır",
+        petError?.message
+      );
+    }
+
+    // Güncelleme verilerini hazırla
+    const updateData = {};
+    if (name) updateData.name = name.trim();
+    if (weight_kg !== undefined) updateData.weight_kg = weight_kg;
+    if (description !== undefined) updateData.description = description;
+
+    // Hayvan bilgilerini güncelle
+    const { data, error } = await supabase
+      .from("pets")
+      .update(updateData)
+      .eq("user_id", userId)
+      .eq("id", id)
+      .select()
+      .single();
+
+    if (error) {
+      throw new CustomError(
+        Enum.HTTP_CODES.BAD_REQUEST,
+        "Hayvan bilgilerini düzenlerken bir hata oluştu",
+        error.message
+      );
+    }
+
+    const successResponse = Response.successResponse(Enum.HTTP_CODES.OK, {
+      message: "Hayvan bilgileri başarıyla güncellendi!",
+      pet: data,
+    });
+
+    res.status(successResponse.code).json(successResponse);
+  } catch (error) {
+    const errorResponse = Response.errorResponse(error);
     res.status(errorResponse.code).json(errorResponse);
   }
 });
