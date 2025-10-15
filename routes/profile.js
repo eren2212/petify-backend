@@ -718,7 +718,7 @@ router.delete("/pet/image/:imageId", verifyToken, async (req, res) => {
     // 1. Resim kaydını getir
     const { data: imageData, error: fetchError } = await supabase
       .from("profile_images")
-      .select("*, pets!inner(user_id)")
+      .select("*")
       .eq("id", imageId)
       .eq("profile_type", "pet")
       .single();
@@ -732,7 +732,14 @@ router.delete("/pet/image/:imageId", verifyToken, async (req, res) => {
     }
 
     // 2. Pet'in bu kullanıcıya ait olup olmadığını kontrol et
-    if (imageData.pets.user_id !== userId) {
+    const { data: petData, error: petError } = await supabase
+      .from("pets")
+      .select("id, user_id")
+      .eq("id", imageData.profile_id)
+      .eq("user_id", userId)
+      .single();
+
+    if (petError || !petData) {
       throw new CustomError(
         Enum.HTTP_CODES.FORBIDDEN,
         "Yetkiniz yok",
@@ -755,7 +762,7 @@ router.delete("/pet/image/:imageId", verifyToken, async (req, res) => {
     // 4. Database'de is_active'i false yap (soft delete)
     const { data: updatedImage, error: updateError } = await supabase
       .from("profile_images")
-      .update({ is_active: false })
+      .delete()
       .eq("id", imageId)
       .select()
       .single();
