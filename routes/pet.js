@@ -256,4 +256,145 @@ router.put("/my/:id", verifyToken, async (req, res) => {
   }
 });
 
+/**
+ * @route POST /profile/pet/vaccination
+ * @desc Pet aşılama bilgisi ekleme
+ * @access Private
+ */
+
+router.post("/vaccination", verifyToken, async (req, res) => {
+  const {
+    pet_id,
+    vaccine_name,
+    vaccination_date,
+    next_due_date,
+    veterinarian_name,
+    clinic_name,
+    batch_number,
+    notes,
+  } = req.body;
+
+  const userId = req.user.id;
+
+  try {
+    // Pet'in bu kullanıcıya ait olup olmadığını kontrol et
+    const { data: petData, error: petError } = await supabase
+      .from("pets")
+      .select("id")
+      .eq("id", pet_id)
+      .eq("user_id", userId)
+      .single();
+
+    if (petError || !petData) {
+      throw new CustomError(
+        Enum.HTTP_CODES.BAD_REQUEST,
+        "Pet bulunamadı",
+        "Bu pet size ait değil veya mevcut değil"
+      );
+    }
+
+    const newVaccination = {
+      pet_id,
+      vaccine_name,
+      vaccination_date,
+      next_due_date,
+      veterinarian_name,
+      clinic_name,
+      batch_number,
+      notes,
+    };
+
+    const { data, error } = await supabase
+      .from("pet_vaccinations")
+      .insert(newVaccination)
+      .select()
+      .single();
+
+    if (error) {
+      throw new CustomError(
+        Enum.HTTP_CODES.BAD_REQUEST,
+        "Yeni aşılama bilgileri kaydedilemedi",
+        error.message
+      );
+    }
+
+    const successResponse = Response.successResponse(Enum.HTTP_CODES.OK, {
+      message: "Aşılama bilgisi başarıyla kaydedildi",
+      vaccination: data,
+    });
+
+    res.status(successResponse.code).json(successResponse);
+  } catch (error) {
+    const errorResponse = Response.errorResponse(error);
+    res.status(errorResponse.code).json(errorResponse);
+  }
+});
+
+/**
+ * @route GET /pet/vaccination/:petId
+ * @desc Pet aşılama bilgisi listeleme
+ * @access Private
+ */
+router.get("/vaccination/:petId", verifyToken, async (req, res) => {
+  const { petId } = req.params;
+  const userId = req.user.id;
+
+  try {
+    // Input validation
+    if (!petId) {
+      throw new CustomError(
+        Enum.HTTP_CODES.BAD_REQUEST,
+        "Pet ID parametresi gereklidir"
+      );
+    }
+
+    // Pet'in kullanıcıya ait olup olmadığını kontrol et
+    const { data: petData, error: petError } = await supabase
+      .from("pets")
+      .select("id, name")
+      .eq("id", petId)
+      .eq("user_id", userId)
+      .single();
+
+    if (petError || !petData) {
+      throw new CustomError(
+        Enum.HTTP_CODES.NOT_FOUND,
+        "Bu kullanıcıya ait hayvan bulunamadı",
+        petError?.message
+      );
+    }
+
+    // Hayvana ait tüm aşıları getir
+    const { data: petVaccinationData, error: petVaccinationError } =
+      await supabase
+        .from("pet_vaccinations")
+        .select("*")
+        .eq("pet_id", petId)
+        .order("vaccination_date", { ascending: false });
+
+    if (petVaccinationError) {
+      throw new CustomError(
+        Enum.HTTP_CODES.BAD_REQUEST,
+        "Aşı bilgileri getirilirken bir hata oluştu",
+        petVaccinationError.message
+      );
+    }
+
+    const successResponse = Response.successResponse(Enum.HTTP_CODES.OK, {
+      message: "Hayvan aşıları başarıyla getirildi",
+      pet: {
+        id: petData.id,
+        name: petData.name,
+      },
+      vaccinations: petVaccinationData || [],
+      total_count: petVaccinationData ? petVaccinationData.length : 0,
+    });
+
+    res.status(successResponse.code).json(successResponse);
+  } catch (error) {
+    const errorResponse = Response.errorResponse(error);
+    res.status(errorResponse.code).json(errorResponse);
+  }
+});
+
 module.exports = router;
