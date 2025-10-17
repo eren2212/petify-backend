@@ -397,4 +397,64 @@ router.get("/vaccination/:petId", verifyToken, async (req, res) => {
   }
 });
 
+/**
+ * @route GET /pet/vaccination/detail/:vaccinationId
+ * @desc Tek bir aşının detayını getir
+ * @access Private
+ */
+router.get(
+  "/vaccination/detail/:vaccinationId",
+  verifyToken,
+  async (req, res) => {
+    const { vaccinationId } = req.params;
+    const userId = req.user.id;
+
+    try {
+      // Aşı bilgisini pet bilgisiyle birlikte getir
+      const { data: vaccinationData, error: vaccinationError } = await supabase
+        .from("pet_vaccinations")
+        .select(
+          `
+        *,
+        pet:pets(
+          id,
+          user_id,
+          name,
+          breed,
+          pet_type:pet_types(name, name_tr)
+        )
+      `
+        )
+        .eq("id", vaccinationId)
+        .single();
+
+      if (vaccinationError || !vaccinationData) {
+        throw new CustomError(
+          Enum.HTTP_CODES.NOT_FOUND,
+          "Aşı bilgisi bulunamadı",
+          vaccinationError?.message
+        );
+      }
+
+      // Pet'in bu kullanıcıya ait olup olmadığını kontrol et (security)
+      if (vaccinationData.pet.user_id !== userId) {
+        throw new CustomError(
+          Enum.HTTP_CODES.FORBIDDEN,
+          "Bu aşı bilgisine erişim yetkiniz yok"
+        );
+      }
+
+      const successResponse = Response.successResponse(Enum.HTTP_CODES.OK, {
+        message: "Aşı detayı başarıyla getirildi",
+        vaccination: vaccinationData,
+      });
+
+      res.status(successResponse.code).json(successResponse);
+    } catch (error) {
+      const errorResponse = Response.errorResponse(error);
+      res.status(errorResponse.code).json(errorResponse);
+    }
+  }
+);
+
 module.exports = router;
