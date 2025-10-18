@@ -457,4 +457,184 @@ router.get(
   }
 );
 
+/**
+ * @route POST /pet/lost
+ * @desc Kaybolmuş hayvan ilanı ekleme
+ * @access Private
+ */
+router.post("/lost", verifyToken, async (req, res) => {
+  const {
+    pet_id,
+    pet_type_id,
+    pet_name,
+    breed,
+    birthdate,
+    gender,
+    color,
+    description,
+    lost_date,
+    lost_time,
+    last_seen_location,
+    last_seen_latitude,
+    last_seen_longitude,
+    contact_phone,
+    contact_email,
+    reward_amount,
+    reward_description,
+  } = req.body;
+
+  const userId = req.user.id;
+
+  try {
+    // Zorunlu alan validasyonları
+    if (!pet_name || pet_name.trim() === "") {
+      throw new CustomError(
+        Enum.HTTP_CODES.BAD_REQUEST,
+        "Hayvan adı zorunludur"
+      );
+    }
+
+    if (!description || description.trim() === "") {
+      throw new CustomError(Enum.HTTP_CODES.BAD_REQUEST, "Açıklama zorunludur");
+    }
+
+    if (!lost_date) {
+      throw new CustomError(
+        Enum.HTTP_CODES.BAD_REQUEST,
+        "Kaybolma tarihi zorunludur"
+      );
+    }
+
+    if (!last_seen_location || last_seen_location.trim() === "") {
+      throw new CustomError(
+        Enum.HTTP_CODES.BAD_REQUEST,
+        "Son görülme yeri zorunludur"
+      );
+    }
+
+    if (!last_seen_latitude || !last_seen_longitude) {
+      throw new CustomError(
+        Enum.HTTP_CODES.BAD_REQUEST,
+        "Konum koordinatları (enlem ve boylam) zorunludur"
+      );
+    }
+
+    // Koordinat validasyonu
+    const latitude = parseFloat(last_seen_latitude);
+    const longitude = parseFloat(last_seen_longitude);
+
+    if (isNaN(latitude) || latitude < -90 || latitude > 90) {
+      throw new CustomError(
+        Enum.HTTP_CODES.BAD_REQUEST,
+        "Geçersiz enlem değeri (-90 ile 90 arasında olmalı)"
+      );
+    }
+
+    if (isNaN(longitude) || longitude < -180 || longitude > 180) {
+      throw new CustomError(
+        Enum.HTTP_CODES.BAD_REQUEST,
+        "Geçersiz boylam değeri (-180 ile 180 arasında olmalı)"
+      );
+    }
+
+    // Telefon numarası validasyonu (opsiyonel ama girilirse kontrol edilmeli)
+    if (contact_phone) {
+      const cleanPhone = contact_phone.replace(/\s/g, "");
+      if (cleanPhone.length !== 10 || !/^\d+$/.test(cleanPhone)) {
+        throw new CustomError(
+          Enum.HTTP_CODES.BAD_REQUEST,
+          "Telefon numarası 10 haneli olmalı ve sadece rakam içermelidir"
+        );
+      }
+    }
+
+    // Email validasyonu (opsiyonel ama girilirse kontrol edilmeli)
+    if (contact_email) {
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(contact_email)) {
+        throw new CustomError(
+          Enum.HTTP_CODES.BAD_REQUEST,
+          "Geçersiz e-posta adresi"
+        );
+      }
+    }
+
+    // Eğer pet_id verilmişse, bu pet'in kullanıcıya ait olup olmadığını kontrol et
+    if (pet_id) {
+      const { data: petData, error: petError } = await supabase
+        .from("pets")
+        .select("id, name")
+        .eq("id", pet_id)
+        .eq("user_id", userId)
+        .single();
+
+      if (petError || !petData) {
+        throw new CustomError(
+          Enum.HTTP_CODES.BAD_REQUEST,
+          "Belirtilen hayvan bulunamadı veya size ait değil"
+        );
+      }
+    }
+
+    // Kayıp ilan verisini hazırla
+    const newLostPetListing = {
+      user_id: userId,
+      pet_name: pet_name.trim(),
+      description: description.trim(),
+      lost_date: lost_date,
+      last_seen_location: last_seen_location.trim(),
+      last_seen_latitude: latitude,
+      last_seen_longitude: longitude,
+    };
+
+    // Opsiyonel alanları ekle
+    if (pet_id) newLostPetListing.pet_id = pet_id;
+    if (pet_type_id) newLostPetListing.pet_type_id = pet_type_id;
+    if (breed) newLostPetListing.breed = breed.trim();
+    if (birthdate) newLostPetListing.birthdate = birthdate;
+    if (gender) newLostPetListing.gender = gender;
+    if (color) newLostPetListing.color = color.trim();
+    if (lost_time) newLostPetListing.lost_time = lost_time;
+    if (contact_phone)
+      newLostPetListing.contact_phone = contact_phone.replace(/\s/g, "");
+    if (contact_email)
+      newLostPetListing.contact_email = contact_email.trim().toLowerCase();
+    if (reward_amount !== undefined)
+      newLostPetListing.reward_amount = parseFloat(reward_amount);
+    if (reward_description)
+      newLostPetListing.reward_description = reward_description.trim();
+
+    // Veritabanına kaydet
+    const { data, error } = await supabase
+      .from("lost_pet_listings")
+      .insert(newLostPetListing)
+      .select(
+        `
+        *,
+        pet_type:pet_types(id, name, name_tr),
+        pet:pets(id, name, breed)
+      `
+      )
+      .single();
+
+    if (error) {
+      throw new CustomError(
+        Enum.HTTP_CODES.BAD_REQUEST,
+        "Kayıp hayvan ilanı eklenirken bir hata oluştu",
+        error.message
+      );
+    }
+
+    const successResponse = Response.successResponse(Enum.HTTP_CODES.CREATED, {
+      message: "Kayıp hayvan ilanı başarıyla oluşturuldu",
+      listing: data,
+    });
+
+    res.status(successResponse.code).json(successResponse);
+  } catch (error) {
+    const errorResponse = Response.errorResponse(error);
+    res.status(errorResponse.code).json(errorResponse);
+  }
+});
+
 module.exports = router;
