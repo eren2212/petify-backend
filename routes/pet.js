@@ -1,10 +1,46 @@
 const express = require("express");
+const multer = require("multer");
 const supabase = require("../database/supabase");
 const Response = require("../lib/Response");
 const CustomError = require("../lib/Error");
 const Enum = require("../config/Enum");
 const { verifyToken } = require("../middleware/auth");
 const router = express.Router();
+
+// Multer konfigürasyonu - Memory storage kullanıyoruz
+const storage = multer.memoryStorage();
+
+// Dosya filtresi - Sadece izin verilen formatlar
+const fileFilter = (req, file, cb) => {
+  const allowedMimeTypes = [
+    "image/jpeg",
+    "image/jpg",
+    "image/png",
+    "image/webp",
+  ];
+
+  if (allowedMimeTypes.includes(file.mimetype)) {
+    cb(null, true);
+  } else {
+    cb(
+      new CustomError(
+        Enum.HTTP_CODES.BAD_REQUEST,
+        "Geçersiz dosya formatı",
+        "Sadece JPG, PNG ve WebP formatları kabul edilir."
+      ),
+      false
+    );
+  }
+};
+
+// Multer instance
+const upload = multer({
+  storage: storage,
+  fileFilter: fileFilter,
+  limits: {
+    fileSize: 5 * 1024 * 1024, // 5MB
+  },
+});
 
 /**
  * @route GET /pet/types
@@ -150,8 +186,6 @@ router.get("/my/:id", verifyToken, async (req, res) => {
     if (data.birthdate) {
       ageInfo = calculatePetAge(data.birthdate, age_format);
     }
-
-    console.log("Pet age info:", ageInfo);
 
     if (error) {
       throw new CustomError(
@@ -456,7 +490,7 @@ router.get(
     }
   }
 );
-
+//-----------------------KAYBOLMUŞ HAYVANLAR İÇİN OLAN--------------------------------------
 /**
  * @route POST /pet/lost
  * @desc Kaybolmuş hayvan ilanı ekleme
@@ -630,6 +664,274 @@ router.post("/lost", verifyToken, async (req, res) => {
       listing: data,
     });
 
+    res.status(successResponse.code).json(successResponse);
+  } catch (error) {
+    const errorResponse = Response.errorResponse(error);
+    res.status(errorResponse.code).json(errorResponse);
+  }
+});
+
+/**
+ * @route POST /pet/lost/image
+ * @desc Kaybolmuş hayvan ilanı ekleme
+ * @access Private
+ */
+router.post(
+  "/lost/image",
+  verifyToken,
+  upload.single("lostpets"),
+  async (req, res) => {
+    try {
+      if (!req.file) {
+        throw new CustomError(
+          Enum.HTTP_CODES.BAD_REQUEST,
+          "Dosya gerekli",
+          "Lütfen bir pet resmi yükleyin."
+        );
+      }
+
+      const userId = req.user.id;
+      const file = req.file;
+      const { petId } = req.body;
+
+      // petId validasyonu
+      if (!petId) {
+        throw new CustomError(
+          Enum.HTTP_CODES.BAD_REQUEST,
+          "Pet ID gerekli",
+          "Lütfen petId parametresini gönderin."
+        );
+      }
+
+      // 1. Lost pet listing'in bu kullanıcıya ait olup olmadığını kontrol et
+      const { data: listingData, error: listingError } = await supabase
+        .from("lost_pet_listings")
+        .select("id, pet_name")
+        .eq("id", petId)
+        .eq("user_id", userId)
+        .single();
+
+      if (listingError || !listingData) {
+        throw new CustomError(
+          Enum.HTTP_CODES.BAD_REQUEST,
+          "Listing bulunamadı",
+          "Bu kayıp pet ilanı size ait değil veya mevcut değil"
+        );
+      }
+
+      // 2. Mevcut profile_images kaydını kontrol et
+      const { data: existingImage, error: fetchError } = await supabase
+        .from("profile_images")
+        .select("image_url")
+        .eq("profile_id", petId)
+        .single();
+
+      console.log(JSON.stringify(existingImage, null, 2));
+      console.log(JSON.stringify(fetchError, null, 2));
+
+      // 3. Eski resmi sil (eğer varsa)
+      if (existingImage && existingImage.image_url) {
+        const oldFileName = existingImage.image_url;
+
+        const { data: oldDeleteData, error: oldDeleteError } =
+          await supabase.storage.from("lostpets").remove([oldFileName]);
+
+        if (oldDeleteError) {
+          console.error("Eski pet resmi silinemedi:", oldDeleteError);
+        }
+      }
+
+      // 4. Yeni dosya ismi oluşturma
+      const timestamp = Date.now();
+      const fileExtension = file.originalname.split(".").pop();
+      const fileName = `lost-pet-${userId}-${timestamp}.${fileExtension}`;
+
+      // 5. Yeni lost pet resmi yükleme
+      const { data: newImageData, error: newImageError } =
+        await supabase.storage.from("lostpets").upload(fileName, file.buffer, {
+          contentType: file.mimetype,
+          cacheControl: "3600",
+          upsert: false,
+        });
+
+      if (newImageError) {
+        throw new CustomError(
+          Enum.HTTP_CODES.INT_SERVER_ERROR,
+          "Pet resmi yüklenemedi",
+          newImageError.message
+        );
+      }
+
+      if (existingImage) {
+        // Kayıt varsa güncelle
+        const { data: updateData, error: updateErr } = await supabase
+          .from("profile_images")
+          .update({
+            image_url: fileName,
+            is_active: true,
+          })
+          .eq("profile_id", petId)
+          .select()
+          .single();
+      } else {
+        // Kayıt yoksa yeni oluştur
+        const { data: insertData, error: insertErr } = await supabase
+          .from("profile_images")
+          .insert({
+            profile_type: "lost_pet",
+            profile_id: petId,
+            image_url: fileName,
+            is_active: true,
+          })
+          .select()
+          .single();
+
+        if (insertErr) {
+          // Rollback: Storage'dan yüklenen dosyayı geri al
+          await supabase.storage.from("lostpets").remove([fileName]);
+          throw new CustomError(
+            Enum.HTTP_CODES.INT_SERVER_ERROR,
+            "Resim kaydedilemedi",
+            insertErr.message
+          );
+        }
+
+        const successResponse = Response.successResponse(Enum.HTTP_CODES.OK, {
+          message: "Kayıp pet resmi başarıyla yüklendi",
+          image: insertData,
+          listing_name: listingData.pet_name,
+        });
+
+        res.status(successResponse.code).json(successResponse);
+      }
+
+      // 7. Başarılı response
+    } catch (error) {
+      if (error.code === "LIMIT_FILE_SIZE") {
+        const errorResponse = Response.errorResponse(
+          new CustomError(
+            Enum.HTTP_CODES.BAD_REQUEST,
+            "Dosya çok büyük",
+            "Pet resmi boyutu maksimum 5MB olabilir."
+          )
+        );
+        return res.status(errorResponse.code).json(errorResponse);
+      }
+
+      const errorResponse = Response.errorResponse(error);
+      return res.status(errorResponse.code).json(errorResponse);
+    }
+  }
+);
+
+/**
+ * @route GET /pet/lost/:filename
+ * @desc Kaybolmuş hayvan resmini getir
+ * @access Public
+ */
+router.get("/lost/:filename", async (req, res) => {
+  try {
+    const { filename } = req.params;
+
+    // Güvenlik: Sadece avatar dosyalarına izin ver
+    if (!filename || filename.includes("..") || filename.includes("/")) {
+      throw new CustomError(
+        Enum.HTTP_CODES.BAD_REQUEST,
+        "Geçersiz dosya adı",
+        "Dosya adı geçersiz karakterler içeriyor."
+      );
+    }
+
+    // Supabase Storage'dan dosyayı download et
+    const { data, error } = await supabase.storage
+      .from("lostpets")
+      .download(filename);
+
+    if (error || !data) {
+      throw new CustomError(
+        Enum.HTTP_CODES.NOT_FOUND,
+        "Pet bulunamadı",
+        "İstenen pet resmi bulunamadı."
+      );
+    }
+
+    // Dosya tipini belirle
+    const contentType = filename.endsWith(".png")
+      ? "image/png"
+      : filename.endsWith(".webp")
+      ? "image/webp"
+      : "image/jpeg";
+
+    // Buffer'a çevir ve gönder
+    const arrayBuffer = await data.arrayBuffer();
+    const buffer = Buffer.from(arrayBuffer);
+
+    res.setHeader("Content-Type", contentType);
+    res.setHeader("Cache-Control", "public, max-age=31536000"); // 1 yıl cache
+    res.send(buffer);
+  } catch (error) {
+    const errorResponse = Response.errorResponse(error);
+    return res.status(errorResponse.code).json(errorResponse);
+  }
+});
+
+/**
+ * @route GET /pet/lost/nearby?latitude=38.xxx&longitude=28.xxx
+ * @desc Kullanıcıya yakın kaybolmuş hayvanları getir
+ * @access Private
+ */
+
+router.get("/lost/nearby", verifyToken, async (req, res) => {
+  try {
+    const { latitude, longitude } = req.query;
+
+    if (!latitude || !longitude) {
+      throw new CustomError(
+        Enum.HTTP_CODES.BAD_REQUEST,
+        "Koordinat değerleri gerekli",
+        "Enlem ve boylam değerleri zorunludur. Örnek: ?latitude=38.123&longitude=28.456"
+      );
+    }
+
+    // Koordinat validasyonu
+    const lat = parseFloat(latitude);
+    const lon = parseFloat(longitude);
+
+    if (isNaN(lat) || lat < -90 || lat > 90) {
+      throw new CustomError(
+        Enum.HTTP_CODES.BAD_REQUEST,
+        "Geçersiz enlem değeri",
+        "Enlem değeri -90 ile 90 arasında olmalıdır"
+      );
+    }
+
+    if (isNaN(lon) || lon < -180 || lon > 180) {
+      throw new CustomError(
+        Enum.HTTP_CODES.BAD_REQUEST,
+        "Geçersiz boylam değeri",
+        "Boylam değeri -180 ile 180 arasında olmalıdır"
+      );
+    }
+
+    // Supabase'de oluşturduğumuz 'get_nearby_pets' fonksiyonunu çağır
+    const { data, error } = await supabase.rpc("get_nearby_pets", {
+      user_lat: lat,
+      user_lon: lon,
+    });
+
+    if (error) {
+      throw new CustomError(
+        Enum.HTTP_CODES.INT_SERVER_ERROR,
+        "Beklenmeyen bir sunucu hatası oldu",
+        error.message
+      );
+    }
+
+    const successResponse = Response.successResponse(Enum.HTTP_CODES.OK, {
+      message: "Yakındaki kayıp hayvanlar başarıyla getirildi",
+      data: data || [],
+      total_count: data ? data.length : 0,
+    });
     res.status(successResponse.code).json(successResponse);
   } catch (error) {
     const errorResponse = Response.errorResponse(error);
