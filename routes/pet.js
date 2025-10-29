@@ -825,6 +825,142 @@ router.post(
 );
 
 /**
+ * @route GET /pet/lost/nearby?latitude=38.xxx&longitude=28.xxx
+ * @desc Kullanıcıya yakın kaybolmuş hayvanları getir
+ * @access Private
+ */
+router.get("/lost/nearby", verifyToken, async (req, res) => {
+  try {
+    const { latitude, longitude } = req.query;
+    const userId = req.user.id;
+
+    if (!latitude || !longitude) {
+      throw new CustomError(
+        Enum.HTTP_CODES.BAD_REQUEST,
+        "Koordinat değerleri gerekli",
+        "Enlem ve boylam değerleri zorunludur. Örnek: ?latitude=38.123&longitude=28.456"
+      );
+    }
+
+    // Koordinat validasyonu
+    const lat = parseFloat(latitude);
+    const lon = parseFloat(longitude);
+
+    if (isNaN(lat) || lat < -90 || lat > 90) {
+      throw new CustomError(
+        Enum.HTTP_CODES.BAD_REQUEST,
+        "Geçersiz enlem değeri",
+        "Enlem değeri -90 ile 90 arasında olmalıdır"
+      );
+    }
+
+    if (isNaN(lon) || lon < -180 || lon > 180) {
+      throw new CustomError(
+        Enum.HTTP_CODES.BAD_REQUEST,
+        "Geçersiz boylam değeri",
+        "Boylam değeri -180 ile 180 arasında olmalıdır"
+      );
+    }
+
+    // RPC fonksiyonunu kullanarak yakındaki kayıtları getir
+    // Önce RPC ile yakındaki ID'leri al, sonra detaylı bilgileri çek
+    const { data: nearbyIds, error: rpcError } = await supabase.rpc(
+      "get_nearby_pets",
+      {
+        user_lat: lat,
+        user_lon: lon,
+      }
+    );
+
+    if (rpcError) {
+      throw new CustomError(
+        Enum.HTTP_CODES.INT_SERVER_ERROR,
+        "Yakındaki hayvanlar getirilirken hata oluştu",
+        rpcError.message
+      );
+    }
+
+    // Eğer yakında hayvan yoksa boş array döndür
+    if (!nearbyIds || nearbyIds.length === 0) {
+      const successResponse = Response.successResponse(Enum.HTTP_CODES.OK, {
+        message: "Yakındaki kayıp hayvanlar başarıyla getirildi",
+        data: [],
+        total_count: 0,
+      });
+      return res.status(successResponse.code).json(successResponse);
+    }
+
+    // RPC'den gelen ID'leri kullanarak detaylı bilgileri çek
+    const listingIds = nearbyIds.map((item) => item.id);
+
+    // profile_images ile LEFT JOIN yap (bazı ilanlarda resim olmayabilir)
+    // profile_images.profile_id = lost_pet_listings.id ve profile_type = 'lost_pet'
+    const { data: lostPetsData, error: lostPetsError } = await supabase
+      .from("lost_pet_listings")
+      .select(
+        `
+        *,
+        pet_type:pet_types(id, name, name_tr),
+        pet:pets(id, name, breed)
+      `
+      )
+      .in("id", listingIds)
+      .eq("is_active", true)
+      .neq("user_id", userId); // Kendi ilanlarını filtrele
+
+    if (lostPetsError) {
+      throw new CustomError(
+        Enum.HTTP_CODES.INT_SERVER_ERROR,
+        "Kayıp hayvan bilgileri getirilirken hata oluştu",
+        lostPetsError.message
+      );
+    }
+
+    // Tüm profile_images'leri tek sorguda çek (performans optimizasyonu)
+    const { data: allProfileImages, error: imagesError } = await supabase
+      .from("profile_images")
+      .select("profile_id, image_url")
+      .in("profile_id", listingIds)
+      .eq("profile_type", "lost_pet")
+      .eq("is_active", true);
+
+    // Image'ları profile_id'ye göre map'le
+    const imageMap = {};
+    if (allProfileImages && !imagesError) {
+      allProfileImages.forEach((img) => {
+        // Her profile_id için sadece ilk resmi al
+        if (!imageMap[img.profile_id]) {
+          imageMap[img.profile_id] = img.image_url;
+        }
+      });
+    }
+
+    // Listing'leri image_url ve distance ile birleştir
+    const listingsWithImages = (lostPetsData || []).map((listing) => {
+      // distance bilgisini RPC sonucundan al
+      const nearbyItem = nearbyIds.find((item) => item.id === listing.id);
+      const distance = nearbyItem?.distance || null;
+
+      return {
+        ...listing,
+        image_url: imageMap[listing.id] || null,
+        distance: distance,
+      };
+    });
+
+    const successResponse = Response.successResponse(Enum.HTTP_CODES.OK, {
+      message: "Yakındaki kayıp hayvanlar başarıyla getirildi",
+      data: listingsWithImages || [],
+      total_count: listingsWithImages ? listingsWithImages.length : 0,
+    });
+    res.status(successResponse.code).json(successResponse);
+  } catch (error) {
+    const errorResponse = Response.errorResponse(error);
+    res.status(errorResponse.code).json(errorResponse);
+  }
+});
+
+/**
  * @route GET /pet/lost/:filename
  * @desc Kaybolmuş hayvan resmini getir
  * @access Public
@@ -872,70 +1008,6 @@ router.get("/lost/:filename", async (req, res) => {
   } catch (error) {
     const errorResponse = Response.errorResponse(error);
     return res.status(errorResponse.code).json(errorResponse);
-  }
-});
-
-/**
- * @route GET /pet/lost/nearby?latitude=38.xxx&longitude=28.xxx
- * @desc Kullanıcıya yakın kaybolmuş hayvanları getir
- * @access Private
- */
-
-router.get("/lost/nearby", verifyToken, async (req, res) => {
-  try {
-    const { latitude, longitude } = req.query;
-
-    if (!latitude || !longitude) {
-      throw new CustomError(
-        Enum.HTTP_CODES.BAD_REQUEST,
-        "Koordinat değerleri gerekli",
-        "Enlem ve boylam değerleri zorunludur. Örnek: ?latitude=38.123&longitude=28.456"
-      );
-    }
-
-    // Koordinat validasyonu
-    const lat = parseFloat(latitude);
-    const lon = parseFloat(longitude);
-
-    if (isNaN(lat) || lat < -90 || lat > 90) {
-      throw new CustomError(
-        Enum.HTTP_CODES.BAD_REQUEST,
-        "Geçersiz enlem değeri",
-        "Enlem değeri -90 ile 90 arasında olmalıdır"
-      );
-    }
-
-    if (isNaN(lon) || lon < -180 || lon > 180) {
-      throw new CustomError(
-        Enum.HTTP_CODES.BAD_REQUEST,
-        "Geçersiz boylam değeri",
-        "Boylam değeri -180 ile 180 arasında olmalıdır"
-      );
-    }
-
-    // Supabase'de oluşturduğumuz 'get_nearby_pets' fonksiyonunu çağır
-    const { data, error } = await supabase.rpc("get_nearby_pets", {
-      user_lat: lat,
-      user_lon: lon,
-    });
-
-    if (error) {
-      throw new CustomError(
-        Enum.HTTP_CODES.INT_SERVER_ERROR,
-        "Beklenmeyen bir sunucu hatası oldu",
-        error.message
-      );
-    }
-
-    const successResponse = Response.successResponse(Enum.HTTP_CODES.OK, {
-      message: "Yakındaki kayıp hayvanlar başarıyla getirildi",
-      data: data || [],
-      total_count: data ? data.length : 0,
-    });
-    res.status(successResponse.code).json(successResponse);
-  } catch (error) {
-    const errorResponse = Response.errorResponse(error);
-    res.status(errorResponse.code).json(errorResponse);
   }
 });
 
