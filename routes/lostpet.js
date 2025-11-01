@@ -27,14 +27,14 @@ router.get("/detail/:id", verifyToken, async (req, res) => {
 
     const { data, error } = await supabase
       .from("lost_pet_listings")
-      .select("*")
+      .select(`*,pet_type:pet_types(id, name, name_tr)`)
       .eq("id", id)
       .eq("is_active", true)
       .single();
 
     if (error) {
       throw new CustomError(
-        Enum.HTTP_CODES.INTERNAL_SERVER_ERROR,
+        Enum.HTTP_CODES.INT_SERVER_ERROR,
         "Kayıp hayvan ilanı bulunamadı",
         error.message
       );
@@ -72,7 +72,7 @@ router.get("/my/listings", verifyToken, async (req, res) => {
 
     if (error) {
       throw new CustomError(
-        Enum.HTTP_CODES.INTERNAL_SERVER_ERROR,
+        Enum.HTTP_CODES.INT_SERVER_ERROR,
         "Kayıp hayvan ilanları getirilirken hata oluştu",
         error.message
       );
@@ -100,7 +100,11 @@ router.get("/image/:id", async (req, res) => {
     const { id } = req.params;
 
     if (!id) {
-      throw new CustomError(Enum.HTTP_CODES.BAD_REQUEST, "ID is required");
+      throw new CustomError(
+        Enum.HTTP_CODES.BAD_REQUEST,
+        "ID gerekli",
+        "ID gerekli"
+      );
     }
 
     const { data, error } = await supabase
@@ -112,7 +116,7 @@ router.get("/image/:id", async (req, res) => {
 
     if (error) {
       throw new CustomError(
-        Enum.HTTP_CODES.INTERNAL_SERVER_ERROR,
+        Enum.HTTP_CODES.INT_SERVER_ERROR,
         "Kayıp hayvan ilanı resmi getirilirken hata oluştu",
         error.message
       );
@@ -134,7 +138,7 @@ router.get("/image/:id", async (req, res) => {
 
     if (imageError) {
       throw new CustomError(
-        Enum.HTTP_CODES.INTERNAL_SERVER_ERROR,
+        Enum.HTTP_CODES.INT_SERVER_ERROR,
         "Kayıp hayvan ilanı resmi getirilirken hata oluştu",
         imageError.message
       );
