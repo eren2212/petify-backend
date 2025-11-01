@@ -12,7 +12,7 @@ const router = express.Router();
  * @desc Kayıp hayvan ilanını getir
  * @access Private
  */
-router.get("/:id", verifyToken, async (req, res) => {
+router.get("/detail/:id", verifyToken, async (req, res) => {
   try {
     const { id } = req.params;
     const userId = req.user.id;
