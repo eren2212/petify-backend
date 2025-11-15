@@ -143,6 +143,86 @@ router.get("/my/listings", verifyToken, async (req, res) => {
 });
 
 /**
+ * @route PUT /lostpet/:id
+ * @desc Kayıp hayvan ilanı bulundu
+ * @access Private
+ */
+router.put("/:id", verifyToken, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { id } = req.params;
+
+    if (!userId) {
+      throw new CustomError(Enum.HTTP_CODES.BAD_REQUEST, "User ID is required");
+    }
+
+    const { data, error } = await supabase
+      .from("lost_pet_listings")
+      .update({
+        status: "found",
+        found_date: new Date(),
+      })
+      .eq("id", id)
+      .eq("user_id", userId);
+
+    if (error) {
+      throw new CustomError(
+        Enum.HTTP_CODES.INT_SERVER_ERROR,
+        "Kayıp hayvan ilanı bulunduğunda hata oluştu",
+        error.message
+      );
+    }
+    const successResponse = Response.successResponse(Enum.HTTP_CODES.OK, {
+      message: "Kayıp hayvan ilanı başarıyla bulundu",
+      listing: data,
+    });
+    res.status(successResponse.code).json(successResponse);
+  } catch (error) {
+    const errorResponse = Response.errorResponse(error);
+    res.status(errorResponse.code).json(errorResponse);
+  }
+});
+
+/**
+ * @route DELETE /lostpet/:id
+ * @desc Kayıp hayvan ilanı sil
+ * @access Private
+ */
+router.delete("/:id", verifyToken, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { id } = req.params;
+
+    if (!userId) {
+      throw new CustomError(Enum.HTTP_CODES.BAD_REQUEST, "User ID is required");
+    }
+
+    const { data, error } = await supabase
+      .from("lost_pet_listings")
+      .delete()
+      .eq("id", id)
+      .eq("user_id", userId);
+
+    if (error) {
+      throw new CustomError(
+        Enum.HTTP_CODES.INT_SERVER_ERROR,
+        "Kayıp hayvan ilanı silinirken hata oluştu",
+        error.message
+      );
+    }
+
+    const successResponse = Response.successResponse(Enum.HTTP_CODES.OK, {
+      message: "Kayıp hayvan ilanı başarıyla silindi",
+      listing: data,
+    });
+    res.status(successResponse.code).json(successResponse);
+  } catch (error) {
+    const errorResponse = Response.errorResponse(error);
+    res.status(errorResponse.code).json(errorResponse);
+  }
+});
+
+/**
  * @route GET /lostpet/image/:id
  * @desc Kayıp hayvan ilanı resmini getir
  * @access Public
