@@ -422,6 +422,7 @@ router.get("/nearby", verifyToken, async (req, res) => {
       `
       )
       .in("id", listingIds)
+      .eq("status", "active")
       .eq("is_active", true)
       .neq("user_id", userId);
 
@@ -588,7 +589,7 @@ router.put("/:id", verifyToken, async (req, res) => {
     const { data, error } = await supabase
       .from("adoption_listings")
       .update({
-        status: "expired",
+        status: "passive",
         adopted_date: new Date(),
       })
       .eq("id", id)

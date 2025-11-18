@@ -905,6 +905,7 @@ router.get("/lost/nearby", verifyToken, async (req, res) => {
       `
       )
       .in("id", listingIds)
+      .eq("status", "active")
       .eq("is_active", true)
       .neq("user_id", userId); // Kendi ilanlarını filtrele
 
