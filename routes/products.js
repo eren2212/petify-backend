@@ -186,7 +186,7 @@ router.put("/:id", verifyToken, async (req, res) => {
         `
     *,
     category:product_categories(id, name, name_tr),
-    pet_type:pet_types(id, name, name_tr),
+    pet_type:pet_types(id, name, name_tr)
   `
       )
       .single();
@@ -195,7 +195,7 @@ router.put("/:id", verifyToken, async (req, res) => {
       throw new CustomError(
         Enum.HTTP_CODES.INT_SERVER_ERROR,
         "Product update failed",
-        error.message
+        productError.message
       );
     }
 
