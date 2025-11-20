@@ -125,13 +125,7 @@ router.post("/add", verifyToken, async (req, res) => {
     const { data: productData, error: productError } = await supabase
       .from("products")
       .insert(newProduct)
-      .select(
-        `
-      *,
-      category:product_categories(id, name, name_tr),
-      pet_type:pet_types(id, name, name_tr),
-    `
-      )
+      .select("*")
       .single();
 
     if (productError || !productData) {
@@ -197,7 +191,7 @@ router.put("/:id", verifyToken, async (req, res) => {
       )
       .single();
 
-    if (error || !data) {
+    if (productError || !productData) {
       throw new CustomError(
         Enum.HTTP_CODES.INT_SERVER_ERROR,
         "Product update failed",
@@ -355,10 +349,44 @@ router.get("/", verifyToken, async (req, res) => {
     const { page, limit } = req.query;
     const userId = req.user.id;
 
+    const { data, error } = await supabase
+      .from("user_roles")
+      .select("id")
+      .eq("user_id", userId)
+      .eq("role_type", "pet_shop")
+      .eq("status", "approved")
+      .single();
+
+    if (error || !data) {
+      throw new CustomError(
+        Enum.HTTP_CODES.FORBIDDEN,
+        "Role not found",
+        "User does not have a role to add products"
+      );
+    }
+
+    const userRoleId = data.id;
+
+    const { data: petShopProfileData, error: petShopProfileError } =
+      await supabase
+        .from("pet_shop_profiles")
+        .select("id")
+        .eq("user_role_id", userRoleId)
+        .single();
+
+    if (petShopProfileError || !petShopProfileData) {
+      throw new CustomError(
+        Enum.HTTP_CODES.FORBIDDEN,
+        "Pet shop profile not found",
+        "User does not have a pet shop profile to add products"
+      );
+    }
+    const petShopProfileId = petShopProfileData.id;
+
     const { data: productsData, error: productsError } = await supabase
       .from("products")
       .select("*")
-      .eq("user_id", userId)
+      .eq("pet_shop_profile_id", petShopProfileId)
       .order("created_at", { ascending: false })
       .range((page - 1) * limit, page * limit - 1);
     if (productsError || !productsData) {
@@ -380,6 +408,40 @@ router.get("/", verifyToken, async (req, res) => {
   }
 });
 
+/**
+ * @route GET /products/all
+ * @desc Products get
+ * @access Public all
+ */
+
+router.get("/all", verifyToken, async (req, res) => {
+  const { page, limit } = req.query;
+
+  try {
+    const { data, error } = await supabase
+      .from("products")
+      .select("*")
+      .order("created_at", { ascending: false })
+      .range((page - 1) * limit, page * limit - 1);
+
+    if (error) {
+      throw new CustomError(
+        Enum.HTTP_CODES.BAD_REQUEST,
+        "Ürünler görüntülenemedi",
+        error.message
+      );
+    }
+
+    const successResponse = Response.successResponse(Enum.HTTP_CODES.OK, {
+      message: "Ürünler başarılı bir şekilde görüntülendi",
+      data: data,
+    });
+    res.status(successResponse.code).json(successResponse);
+  } catch (error) {
+    const errorResponse = Response.errorResponse(error);
+    res.status(errorResponse.code).json(errorResponse);
+  }
+});
 /**
  * @route GET /products/category/{categoryName}
  * @desc Products by category name
