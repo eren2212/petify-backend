@@ -515,24 +515,36 @@ router.get("/:id", async (req, res) => {
  * @desc Product image upload
  * @access Private
  */
+/**
+ * @route POST /products/image/:id
+ * @desc Upload image for a specific product
+ * @access Private (Only Product Owner)
+ */
 router.post(
-  "/image",
+  "/image/:id", // <-- URL artık ID alıyor
   verifyToken,
   upload.single("products"),
   async (req, res) => {
     try {
+      const { id: productId } = req.params; // URL'den ürün ID'sini al
+
+      // 1. Dosya Kontrolü
       if (!req.file) {
         throw new CustomError(
           Enum.HTTP_CODES.BAD_REQUEST,
           "Dosya gerekli",
-          "Lütfen bir product resmi yükleyin."
+          "Lütfen bir ürün resmi yükleyin."
         );
       }
 
       const userId = req.user.id;
       const file = req.file;
 
-      // 1. user_role_id'yi bul
+      // 2. Kullanıcının yetkisini ve ürünün sahibi olup olmadığını kontrol et
+      // (Join işlemi ile hem rolü hem de ürünün kime ait olduğunu tek sorguda çözebiliriz
+      // ama senin yapına sadık kalarak adım adım gidelim)
+
+      // A. Kullanıcının PetShop Rolünü Bul
       const { data: roleData, error: roleError } = await supabase
         .from("user_roles")
         .select("id")
@@ -544,44 +556,62 @@ router.post(
       if (roleError || !roleData) {
         throw new CustomError(
           Enum.HTTP_CODES.FORBIDDEN,
-          "Role not found",
-          "User does not have an approved role"
+          "Yetkisiz işlem",
+          "Bu işlemi yapmak için onaylı bir mağaza hesabınız olmalı."
         );
       }
-      // 2. Mevcut logo kontrolü
-      const { data: petShopProfileData, error: petShopProfileError } =
-        await supabase
-          .from("pet_shop_profiles")
-          .select("id")
-          .eq("user_role_id", roleData.id)
-          .single();
 
-      if (petShopProfileError) {
+      // B. PetShop Profil ID'sini Bul
+      const { data: petShopProfile, error: profileError } = await supabase
+        .from("pet_shop_profiles")
+        .select("id")
+        .eq("user_role_id", roleData.id)
+        .single();
+
+      if (profileError || !petShopProfile) {
         throw new CustomError(
           Enum.HTTP_CODES.INT_SERVER_ERROR,
-          "Pet shop profile bilgisi alınamadı",
-          petShopProfileError.message
+          "Profil hatası",
+          "Mağaza profili bulunamadı."
         );
       }
 
-      // 3. Eski logo varsa sil
-      if (petShopProfileData.image_url) {
-        const oldFilePath = petShopProfileData.image_url;
-        const { error: deleteError } = await supabase.storage
-          .from("products")
-          .remove([oldFilePath]);
+      // C. Ürünü Bul ve SAHİPLİĞİNİ Kontrol Et
+      // (Ürün var mı? Ve bu ürün bu mağazaya mı ait?)
+      const { data: currentProduct, error: productError } = await supabase
+        .from("products")
+        .select("id, image_url")
+        .eq("id", productId)
+        .eq("pet_shop_profile_id", petShopProfile.id) // <-- GÜVENLİK KONTROLÜ BURASI
+        .single();
 
-        if (deleteError) {
-          console.error("Eski product image silinemedi:", deleteError);
-        }
+      if (productError || !currentProduct) {
+        throw new CustomError(
+          Enum.HTTP_CODES.NOT_FOUND,
+          "Ürün bulunamadı veya yetkisiz erişim",
+          "Güncellenmek istenen ürün bulunamadı veya bu ürünü düzenleme yetkiniz yok."
+        );
       }
 
-      // 4. Yeni logo yükle
-      const timestamp = Date.now();
-      const fileExtension = file.originalname.split(".").pop();
-      const fileName = `${userId}-${timestamp}.${fileExtension}`;
+      // 3. Eski resmi sil (Eğer varsa)
+      if (currentProduct.image_url) {
+        const oldFileName = currentProduct.image_url;
+        // Hata alsa bile devam etsin, belki dosya zaten storage'da yoktur ama DB'de yazıyordur.
+        const { error: deleteError } = await supabase.storage
+          .from("products")
+          .remove([oldFileName]);
 
-      const { data: uploadData, error: uploadError } = await supabase.storage
+        if (deleteError)
+          console.log("Eski resim silinirken uyarı:", deleteError.message);
+      }
+
+      // 4. Yeni resmi Storage'a yükle
+      const timestamp = Date.now();
+      // Dosya ismini random yapmak her zaman daha iyidir, çakışmayı önler
+      const fileExtension = file.originalname.split(".").pop();
+      const fileName = `product-${productId}-${timestamp}.${fileExtension}`;
+
+      const { error: uploadError } = await supabase.storage
         .from("products")
         .upload(fileName, file.buffer, {
           contentType: file.mimetype,
@@ -592,32 +622,32 @@ router.post(
       if (uploadError) {
         throw new CustomError(
           Enum.HTTP_CODES.INT_SERVER_ERROR,
-          "Product image upload failed",
+          "Resim yükleme başarısız",
           uploadError.message
         );
       }
 
-      // 5. Database güncelle
+      // 5. Database'i güncelle (Sadece o ürünün satırını)
       const { data: updateData, error: updateError } = await supabase
         .from("products")
         .update({ image_url: fileName })
-        .eq("pet_shop_profile_id", petShopProfileData.id)
+        .eq("id", productId) // <-- ARTIK SADECE BU ID GÜNCELLENİYOR
         .select()
         .single();
 
       if (updateError) {
-        // Yüklenen dosyayı geri al
+        // DB güncellenemezse yüklenen resmi geri sil (Temizlik)
         await supabase.storage.from("products").remove([fileName]);
 
         throw new CustomError(
           Enum.HTTP_CODES.INT_SERVER_ERROR,
-          "Product image update failed",
+          "Veritabanı güncelleme başarısız",
           updateError.message
         );
       }
 
       const response = Response.successResponse(Enum.HTTP_CODES.OK, {
-        message: "Product image updated successfully",
+        message: "Ürün resmi başarıyla güncellendi",
         image_path: fileName,
         product: updateData,
       });
@@ -629,10 +659,10 @@ router.post(
           new CustomError(
             Enum.HTTP_CODES.BAD_REQUEST,
             "Dosya çok büyük",
-            "Logo boyutu maksimum 5MB olabilir."
+            "Resim boyutu maksimum 5MB olabilir."
           )
         );
-        res.status(errorResponse.code).json(errorResponse);
+        return res.status(errorResponse.code).json(errorResponse);
       }
 
       const errorResponse = Response.errorResponse(error);
@@ -640,7 +670,6 @@ router.post(
     }
   }
 );
-
 /**
  * @route GET /products/image/:filename
  * @desc Product image download
