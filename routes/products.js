@@ -22,6 +22,38 @@ const upload = multer({
     }
   },
 });
+/**
+ * @route GET /products/categories
+ * @desc Product categories
+ * @access Private
+ */
+
+router.get("/categories", verifyToken, async (req, res) => {
+  try {
+    const { data, error } = await supabase
+      .from("product_categories")
+      .select("*")
+      .order("display_order");
+
+    if (error) {
+      throw new CustomError(
+        Enum.HTTP_CODES.BAD_REQUEST,
+        "Categoride bir hata oluştu",
+        error.message
+      );
+    }
+
+    const successResponse = Response.successResponse(Enum.HTTP_CODES.OK, {
+      message: "Başarılı bir şekilde kategoriler getirildi",
+      data: data || [],
+    });
+
+    res.status(successResponse.code).json(successResponse);
+  } catch (error) {
+    const errorResponse = Response.errorResponse(error);
+    res.status(errorResponse.code).json(errorResponse);
+  }
+});
 
 /**
  * @route POST /products/add
@@ -597,3 +629,5 @@ router.get("/image/:filename", async (req, res) => {
     return res.status(errorResponse.code).json(errorResponse);
   }
 });
+
+module.exports = router;
