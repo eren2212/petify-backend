@@ -346,7 +346,7 @@ router.delete("/:id", verifyToken, async (req, res) => {
 
 router.get("/", verifyToken, async (req, res) => {
   try {
-    const { page, limit } = req.query;
+    const { page, limit, categoryId, status } = req.query;
     const userId = req.user.id;
 
     const { data, error } = await supabase
@@ -383,12 +383,27 @@ router.get("/", verifyToken, async (req, res) => {
     }
     const petShopProfileId = petShopProfileData.id;
 
-    const { data: productsData, error: productsError } = await supabase
+    // Build query with optional filters
+    let query = supabase
       .from("products")
       .select("*")
-      .eq("pet_shop_profile_id", petShopProfileId)
+      .eq("pet_shop_profile_id", petShopProfileId);
+
+    // Apply category filter if provided
+    if (categoryId) {
+      query = query.eq("category_id", categoryId);
+    }
+
+    // Apply status filter if provided
+    if (status !== undefined && status !== null && status !== "") {
+      const isActive = status === "true" || status === true;
+      query = query.eq("is_active", isActive);
+    }
+
+    const { data: productsData, error: productsError } = await query
       .order("created_at", { ascending: false })
       .range((page - 1) * limit, page * limit - 1);
+
     if (productsError || !productsData) {
       throw new CustomError(
         Enum.HTTP_CODES.INT_SERVER_ERROR,
