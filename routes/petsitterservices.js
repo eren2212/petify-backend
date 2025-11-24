@@ -56,4 +56,91 @@ router.get("/categories", verifyToken, async (req, res) => {
   }
 });
 
+/**
+ * @route GET /petsitterservices/my-services
+ * @desc Pet sitter services get
+ * @access Private
+ */
+
+router.get("/my-services", verifyToken, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { page, limit, categoryId, status } = req.query;
+
+    const { data: UserRoleData, error: UserRoleError } = await supabase
+      .from("user_roles")
+      .select("id")
+      .eq("user_id", userId)
+      .eq("role_type", "pet_sitter")
+      .eq("status", "approved")
+      .single();
+
+    if (UserRoleError || !UserRoleData) {
+      throw new CustomError(
+        Enum.HTTP_CODES.FORBIDDEN,
+        "User role not found",
+        "User does not have an approved pet sitter role"
+      );
+    }
+    const userRoleId = UserRoleData.id;
+
+    const { data: petSitterProfileData, error: PetSitterProfileError } =
+      await supabase
+        .from("pet_sitter_profiles")
+        .select("id")
+        .eq("user_role_id", userRoleId)
+        .single();
+
+    if (PetSitterProfileError || !PetSitterProfileData.id) {
+      throw new CustomError(
+        Enum.HTTP_CODES.FORBIDDEN,
+        "Pet sitter profile not found",
+        "User does not have a pet sitter profile"
+      );
+    }
+    const petSitterProfileId = petSitterProfileData.id;
+
+    let query = supabase
+      .from("pet_sitter_services")
+      .select(
+        `"*", pet_sitter_service_categories!inner(name, name_tr,icon_url), pet_types!inner(name, name_tr)`
+      )
+      .eq("pet_sitter_profile_id", petSitterProfileId);
+
+    // Apply category filter if provided
+    if (categoryId) {
+      query = query.eq("service_category_id", categoryId);
+    }
+
+    if (status !== undefined && status !== null && status !== "") {
+      const isActive = status === "true" || status === true;
+      query = query.eq("is_active", isActive);
+    }
+
+    const { data: petSitterServicesData, error: PetSitterServicesError } =
+      await query
+        .order("created_at", { ascending: false })
+        .range((page - 1) * limit, page * limit - 1);
+
+    if (PetSitterServicesError) {
+      throw new CustomError(
+        Enum.HTTP_CODES.FORBIDDEN,
+        "Pet sitter services not found",
+        "User does not have any pet sitter services"
+      );
+    }
+
+    const successResponse = Response.successResponse(Enum.HTTP_CODES.OK, {
+      message: "Pet sitter services fetched successfully",
+      data: petSitterServicesData,
+      total: petSitterServicesData.length,
+    });
+
+    res.status(successResponse.code).json(successResponse);
+  } catch (error) {
+    const errorResponse = Response.errorResponse(error);
+    res.status(errorResponse.code).json(errorResponse);
+  }
+});
+
 module.exports = router;
