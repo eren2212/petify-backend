@@ -178,7 +178,6 @@ router.post("/add-service", verifyToken, async (req, res) => {
         .select("id")
         .eq("user_role_id", userRoleId)
         .single();
-    console.log(petSitterProfileData);
 
     if (PetSitterProfileError || !petSitterProfileData?.id) {
       throw new CustomError(
@@ -218,6 +217,88 @@ router.post("/add-service", verifyToken, async (req, res) => {
       data: newServiceData,
     });
 
+    res.status(successResponse.code).json(successResponse);
+  } catch (error) {
+    const errorResponse = Response.errorResponse(error);
+    res.status(errorResponse.code).json(errorResponse);
+  }
+});
+
+/**
+ * @route PUT /petsitterservices/update-service/:id
+ * @desc Pet sitter service update
+ * @access Private
+ */
+
+router.put("/update-service/:id", verifyToken, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { id } = req.params;
+    const { service_category_id, pet_type_id, price_type, price, description } =
+      req.body;
+
+    const { data: UserRoleData, error: UserRoleError } = await supabase
+      .from("user_roles")
+      .select("id")
+      .eq("user_id", userId)
+      .eq("role_type", "pet_sitter")
+      .eq("status", "approved")
+      .single();
+
+    if (UserRoleError || !UserRoleData) {
+      throw new CustomError(
+        Enum.HTTP_CODES.FORBIDDEN,
+        "User role not found",
+        "User does not have an approved pet sitter role"
+      );
+    }
+    const userRoleId = UserRoleData.id;
+
+    const { data: petSitterProfileData, error: PetSitterProfileError } =
+      await supabase
+        .from("pet_sitter_profiles")
+        .select("id")
+        .eq("user_role_id", userRoleId)
+        .single();
+
+    if (PetSitterProfileError || !PetSitterProfileData.id) {
+      throw new CustomError(
+        Enum.HTTP_CODES.FORBIDDEN,
+        "Pet sitter profile not found",
+        "User does not have a pet sitter profile"
+      );
+    }
+    const petSitterProfileId = petSitterProfileData.id;
+
+    const updateService = {
+      service_category_id: service_category_id,
+      pet_type_id: pet_type_id,
+      price_type: price_type,
+      price: price,
+      description: description,
+    };
+
+    const { data: petServiceUpdateData, error: petServiceUpdateError } =
+      await supabase
+        .from("pet_sitter_services")
+        .update(updateService)
+        .eq("id", id)
+        .eq("pet_sitter_profile_id", petSitterProfileId)
+        .select()
+        .single();
+
+    if (petServiceUpdateError) {
+      throw new CustomError(
+        Enum.HTTP_CODES.INT_SERVER_ERROR,
+        "Pet sitter service update failed",
+        petServiceUpdateError.message
+      );
+    }
+
+    const successResponse = Response.successResponse(Enum.HTTP_CODES.OK, {
+      message: "Pet sitter service updated successfully",
+      data: petServiceUpdateData,
+    });
     res.status(successResponse.code).json(successResponse);
   } catch (error) {
     const errorResponse = Response.errorResponse(error);
