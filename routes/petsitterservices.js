@@ -450,4 +450,57 @@ router.delete("/service/:id", verifyToken, async (req, res) => {
   }
 });
 
+/*veri tabanından service fotoğrafı getirme endpointi*/
+
+/**
+ * @route GET /products/image/:filename
+ * @desc Product image download
+ * @access Public (herkes görebilir)
+ */
+router.get("/category-icon/:filename", async (req, res) => {
+  try {
+    const { filename } = req.params;
+
+    // Güvenlik: Sadece avatar dosyalarına izin ver
+    if (!filename || filename.includes("..") || filename.includes("/")) {
+      throw new CustomError(
+        Enum.HTTP_CODES.BAD_REQUEST,
+        "Geçersiz dosya adı",
+        "Dosya adı geçersiz karakterler içeriyor."
+      );
+    }
+
+    // Supabase Storage'dan dosyayı download et
+    const { data, error } = await supabase.storage
+      .from("category-icons")
+      .download(filename);
+
+    if (error || !data) {
+      throw new CustomError(
+        Enum.HTTP_CODES.NOT_FOUND,
+        "Category icon not found",
+        "İstenen category icon bulunamadı."
+      );
+    }
+
+    // Dosya tipini belirle
+    const contentType = filename.endsWith(".png")
+      ? "image/png"
+      : filename.endsWith(".webp")
+      ? "image/webp"
+      : "image/jpeg";
+
+    // Buffer'a çevir ve gönder
+    const arrayBuffer = await data.arrayBuffer();
+    const buffer = Buffer.from(arrayBuffer);
+
+    res.setHeader("Content-Type", contentType);
+    res.setHeader("Cache-Control", "public, max-age=31536000"); // 1 yıl cache
+    res.send(buffer);
+  } catch (error) {
+    const errorResponse = Response.errorResponse(error);
+    return res.status(errorResponse.code).json(errorResponse);
+  }
+});
+
 module.exports = router;
