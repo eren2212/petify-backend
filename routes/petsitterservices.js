@@ -306,4 +306,76 @@ router.put("/update-service/:id", verifyToken, async (req, res) => {
   }
 });
 
+/**
+ * @route GET /petsitterservices/service/:id
+ * @desc Pet sitter service get by id
+ * @access Private
+ */
+
+router.get("/service/:id", verifyToken, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { id } = req.params;
+
+    const { data: UserRoleData, error: UserRoleError } = await supabase
+      .from("user_roles")
+      .select("id")
+      .eq("user_id", userId)
+      .eq("role_type", "pet_sitter")
+      .eq("status", "approved")
+      .single();
+
+    if (UserRoleError || !UserRoleData) {
+      throw new CustomError(
+        Enum.HTTP_CODES.FORBIDDEN,
+        "User role not found",
+        "User does not have an approved pet sitter role"
+      );
+    }
+    const userRoleId = UserRoleData.id;
+
+    const { data: petSitterProfileData, error: PetSitterProfileError } =
+      await supabase
+        .from("pet_sitter_profiles")
+        .select("id")
+        .eq("user_role_id", userRoleId)
+        .single();
+
+    if (PetSitterProfileError || !PetSitterProfileData.id) {
+      throw new CustomError(
+        Enum.HTTP_CODES.FORBIDDEN,
+        "Pet sitter profile not found",
+        "User does not have a pet sitter profile"
+      );
+    }
+    const petSitterProfileId = petSitterProfileData.id;
+
+    const { data: petServiceData, error: petServiceError } = await supabase
+      .from("pet_sitter_services")
+      .select(
+        `"*", pet_sitter_service_categories!inner(name, name_tr,icon_url), pet_types!inner(name, name_tr)`
+      )
+      .eq("id", id)
+      .eq("pet_sitter_profile_id", petSitterProfileId)
+      .single();
+
+    if (petServiceError) {
+      throw new CustomError(
+        Enum.HTTP_CODES.FORBIDDEN,
+        "Pet sitter service not found",
+        "Pet sitter service not found"
+      );
+    }
+
+    const successResponse = Response.successResponse(Enum.HTTP_CODES.OK, {
+      message: "Pet sitter service fetched successfully",
+      data: petServiceData,
+    });
+    res.status(successResponse.code).json(successResponse);
+  } catch (error) {
+    const errorResponse = Response.errorResponse(error);
+    res.status(errorResponse.code).json(errorResponse);
+  }
+});
+
 module.exports = router;
