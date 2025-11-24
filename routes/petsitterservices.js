@@ -261,7 +261,7 @@ router.put("/update-service/:id", verifyToken, async (req, res) => {
         .eq("user_role_id", userRoleId)
         .single();
 
-    if (PetSitterProfileError || !PetSitterProfileData.id) {
+    if (PetSitterProfileError || !petSitterProfileData.id) {
       throw new CustomError(
         Enum.HTTP_CODES.FORBIDDEN,
         "Pet sitter profile not found",
@@ -341,7 +341,7 @@ router.get("/service/:id", verifyToken, async (req, res) => {
         .eq("user_role_id", userRoleId)
         .single();
 
-    if (PetSitterProfileError || !PetSitterProfileData.id) {
+    if (PetSitterProfileError || !petSitterProfileData.id) {
       throw new CustomError(
         Enum.HTTP_CODES.FORBIDDEN,
         "Pet sitter profile not found",
@@ -538,14 +538,14 @@ router.patch("/toggle-status/:id", verifyToken, async (req, res) => {
         .eq("user_role_id", userRoleId)
         .single();
 
-    if (PetSitterProfileError || !PetSitterProfileData.id) {
+    if (PetSitterProfileError || !petSitterProfileData.id) {
       throw new CustomError(
         Enum.HTTP_CODES.FORBIDDEN,
         "Pet sitter profile not found",
         "User does not have a pet sitter profile"
       );
     }
-    const petSitterProfileId = PetSitterProfileData.id;
+    const petSitterProfileId = petSitterProfileData.id;
 
     const { data: petServiceData, error: petServiceError } = await supabase
       .from("pet_sitter_services")
