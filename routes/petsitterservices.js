@@ -378,4 +378,76 @@ router.get("/service/:id", verifyToken, async (req, res) => {
   }
 });
 
+/**
+ * @route DELETE /petsitterservices/service/:id
+ * @desc Pet sitter service delete
+ * @access Private
+ */
+
+router.delete("/service/:id", verifyToken, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { id } = req.params;
+
+    const { data: UserRoleData, error: UserRoleError } = await supabase
+      .from("user_roles")
+      .select("id")
+      .eq("user_id", userId)
+      .eq("role_type", "pet_sitter")
+      .eq("status", "approved")
+      .single();
+
+    if (UserRoleError || !UserRoleData) {
+      throw new CustomError(
+        Enum.HTTP_CODES.FORBIDDEN,
+        "User role not found",
+        "User does not have an approved pet sitter role"
+      );
+    }
+    const userRoleId = UserRoleData.id;
+
+    const { data: petSitterProfileData, error: PetSitterProfileError } =
+      await supabase
+        .from("pet_sitter_profiles")
+        .select("id")
+        .eq("user_role_id", userRoleId)
+        .single();
+
+    if (PetSitterProfileError || !PetSitterProfileData.id) {
+      throw new CustomError(
+        Enum.HTTP_CODES.FORBIDDEN,
+        "Pet sitter profile not found",
+        "User does not have a pet sitter profile"
+      );
+    }
+    const petSitterProfileId = petSitterProfileData.id;
+
+    const { data: petServiceDeleteData, error: petServiceDeleteError } =
+      await supabase
+        .from("pet_sitter_services")
+        .delete()
+        .eq("id", id)
+        .eq("pet_sitter_profile_id", petSitterProfileId)
+        .select()
+        .single();
+
+    if (petServiceDeleteError) {
+      throw new CustomError(
+        Enum.HTTP_CODES.INT_SERVER_ERROR,
+        "Pet sitter service delete failed",
+        petServiceDeleteError.message
+      );
+    }
+
+    const successResponse = Response.successResponse(Enum.HTTP_CODES.OK, {
+      message: "Pet sitter service deleted successfully",
+      data: petServiceDeleteData,
+    });
+    res.status(successResponse.code).json(successResponse);
+  } catch (error) {
+    const errorResponse = Response.errorResponse(error);
+    res.status(errorResponse.code).json(errorResponse);
+  }
+});
+
 module.exports = router;
