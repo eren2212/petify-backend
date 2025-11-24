@@ -143,4 +143,86 @@ router.get("/my-services", verifyToken, async (req, res) => {
   }
 });
 
+/**
+ * @route POST /petsitterservices/add-service
+ * @desc Pet sitter service creation
+ * @access Private
+ */
+
+router.post("/add-service", verifyToken, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { service_category_id, pet_type_id, price_type, price, description } =
+      req.body;
+
+    const { data: UserRoleData, error: UserRoleError } = await supabase
+      .from("user_roles")
+      .select("id")
+      .eq("user_id", userId)
+      .eq("role_type", "pet_sitter")
+      .eq("status", "approved")
+      .single();
+
+    if (UserRoleError || !UserRoleData) {
+      throw new CustomError(
+        Enum.HTTP_CODES.FORBIDDEN,
+        "User role not found",
+        "User does not have an approved pet sitter role"
+      );
+    }
+    const userRoleId = UserRoleData.id;
+
+    const { data: petSitterProfileData, error: PetSitterProfileError } =
+      await supabase
+        .from("pet_sitter_profiles")
+        .select("id")
+        .eq("user_role_id", userRoleId)
+        .single();
+    console.log(petSitterProfileData);
+
+    if (PetSitterProfileError || !petSitterProfileData?.id) {
+      throw new CustomError(
+        Enum.HTTP_CODES.FORBIDDEN,
+        "Pet sitter profile not found",
+        "User does not have a pet sitter profile"
+      );
+    }
+    const petSitterProfileId = petSitterProfileData.id;
+
+    const newService = {
+      pet_sitter_profile_id: petSitterProfileId,
+      service_category_id: service_category_id,
+      pet_type_id: pet_type_id,
+      price_type: price_type,
+      price: price,
+      description: description,
+      is_active: true,
+    };
+
+    const { data: newServiceData, error: newServiceError } = await supabase
+      .from("pet_sitter_services")
+      .insert(newService)
+      .select()
+      .single();
+
+    if (newServiceError) {
+      throw new CustomError(
+        Enum.HTTP_CODES.INT_SERVER_ERROR,
+        "Pet sitter service creation failed",
+        newServiceError.message
+      );
+    }
+
+    const successResponse = Response.successResponse(Enum.HTTP_CODES.CREATED, {
+      message: "Pet sitter service created successfully",
+      data: newServiceData,
+    });
+
+    res.status(successResponse.code).json(successResponse);
+  } catch (error) {
+    const errorResponse = Response.errorResponse(error);
+    res.status(errorResponse.code).json(errorResponse);
+  }
+});
+
 module.exports = router;
