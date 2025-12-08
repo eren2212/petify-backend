@@ -91,7 +91,7 @@ router.get("/my-services", verifyToken, async (req, res) => {
         .eq("user_role_id", userRoleId)
         .single();
 
-    if (PetSitterProfileError || !PetSitterProfileData.id) {
+    if (PetSitterProfileError || !petSitterProfileData.id) {
       throw new CustomError(
         Enum.HTTP_CODES.FORBIDDEN,
         "Pet sitter profile not found",
@@ -413,7 +413,7 @@ router.delete("/service/:id", verifyToken, async (req, res) => {
         .eq("user_role_id", userRoleId)
         .single();
 
-    if (PetSitterProfileError || !PetSitterProfileData.id) {
+    if (PetSitterProfileError || !petSitterProfileData.id) {
       throw new CustomError(
         Enum.HTTP_CODES.FORBIDDEN,
         "Pet sitter profile not found",
