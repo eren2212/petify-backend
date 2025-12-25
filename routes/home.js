@@ -240,7 +240,7 @@ router.get("/sitters", verifyToken, async (req, res) => {
         id,
         sitter_name,
         description,
-        profile_image_url,
+        logo_url,
         address,
         latitude,
         longitude,
@@ -270,6 +270,259 @@ router.get("/sitters", verifyToken, async (req, res) => {
     const successResponse = Response.successResponse(Enum.HTTP_CODES.OK, {
       message: "Bakıcılar başarıyla getirildi",
       data: shuffledData,
+    });
+
+    res.status(successResponse.code).json(successResponse);
+  } catch (error) {
+    const errorResponse = Response.errorResponse(error);
+    res.status(errorResponse.code).json(errorResponse);
+  }
+});
+
+/**
+ * @route GET /home/clinic/:id
+ * @desc Klinik detayını getir (Public - herkes görebilir)
+ * @access Private
+ */
+router.get("/clinic/:id", verifyToken, async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    if (!id) {
+      throw new CustomError(
+        Enum.HTTP_CODES.BAD_REQUEST,
+        "Klinik ID gerekli",
+        "ID parametresi eksik"
+      );
+    }
+
+    // Klinik profilini getir
+    const { data: clinicData, error: clinicError } = await supabase
+      .from("clinic_profiles")
+      .select(
+        `
+        id,
+        clinic_name,
+        description,
+        address,
+        latitude,
+        longitude,
+        phone_number,
+        emergency_phone,
+        email,
+        website_url,
+        instagram_url,
+        logo_url,
+        cover_image_url,
+        working_hours,
+        created_at,
+        updated_at
+      `
+      )
+      .eq("id", id)
+      .single();
+
+    if (clinicError || !clinicData) {
+      throw new CustomError(
+        Enum.HTTP_CODES.NOT_FOUND,
+        "Klinik bulunamadı",
+        clinicError?.message || "İstenen klinik bulunamadı"
+      );
+    }
+
+    const successResponse = Response.successResponse(Enum.HTTP_CODES.OK, {
+      message: "Klinik detayı başarıyla getirildi",
+      data: clinicData,
+    });
+
+    res.status(successResponse.code).json(successResponse);
+  } catch (error) {
+    const errorResponse = Response.errorResponse(error);
+    res.status(errorResponse.code).json(errorResponse);
+  }
+});
+
+/**
+ * @route GET /home/hotel/:id
+ * @desc Pet otel detayını getir (Public - herkes görebilir)
+ * @access Private
+ */
+router.get("/hotel/:id", verifyToken, async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    if (!id) {
+      throw new CustomError(
+        Enum.HTTP_CODES.BAD_REQUEST,
+        "Otel ID gerekli",
+        "ID parametresi eksik"
+      );
+    }
+
+    // Otel profilini getir
+    const { data: hotelData, error: hotelError } = await supabase
+      .from("pet_hotel_profiles")
+      .select(
+        `
+        id,
+        hotel_name,
+        description,
+        address,
+        latitude,
+        longitude,
+        phone_number,
+        emergency_phone,
+        email,
+        website_url,
+        instagram_url,
+        logo_url,
+        cover_image_url,
+        capacity,
+        check_in_time,
+        check_out_time,
+        working_hours,
+        average_rating,
+        total_reviews,
+        created_at,
+        updated_at
+      `
+      )
+      .eq("id", id)
+      .eq("is_active", true)
+      .single();
+
+    if (hotelError || !hotelData) {
+      throw new CustomError(
+        Enum.HTTP_CODES.NOT_FOUND,
+        "Otel bulunamadı",
+        hotelError?.message || "İstenen otel bulunamadı"
+      );
+    }
+
+    const successResponse = Response.successResponse(Enum.HTTP_CODES.OK, {
+      message: "Otel detayı başarıyla getirildi",
+      data: hotelData,
+    });
+
+    res.status(successResponse.code).json(successResponse);
+  } catch (error) {
+    const errorResponse = Response.errorResponse(error);
+    res.status(errorResponse.code).json(errorResponse);
+  }
+});
+
+/**
+ * @route GET /home/shop/:id
+ * @desc Pet shop detayını getir (Public - herkes görebilir)
+ * @access Private
+ */
+router.get("/shop/:id", verifyToken, async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    if (!id) {
+      throw new CustomError(
+        Enum.HTTP_CODES.BAD_REQUEST,
+        "Mağaza ID gerekli",
+        "ID parametresi eksik"
+      );
+    }
+
+    // Shop profilini getir
+    const { data: shopData, error: shopError } = await supabase
+      .from("pet_shop_profiles")
+      .select(
+        `
+        id,
+        shop_name,
+        description,
+        address,
+        latitude,
+        longitude,
+        phone_number,
+        email,
+        website_url,
+        instagram_url,
+        logo_url,
+        cover_image_url,
+        working_hours,
+        created_at,
+        updated_at
+      `
+      )
+      .eq("id", id)
+      .single();
+
+    if (shopError || !shopData) {
+      throw new CustomError(
+        Enum.HTTP_CODES.NOT_FOUND,
+        "Mağaza bulunamadı",
+        shopError?.message || "İstenen mağaza bulunamadı"
+      );
+    }
+
+    const successResponse = Response.successResponse(Enum.HTTP_CODES.OK, {
+      message: "Mağaza detayı başarıyla getirildi",
+      data: shopData,
+    });
+
+    res.status(successResponse.code).json(successResponse);
+  } catch (error) {
+    const errorResponse = Response.errorResponse(error);
+    res.status(errorResponse.code).json(errorResponse);
+  }
+});
+
+/**
+ * @route GET /home/sitter/:id
+ * @desc Pet sitter detayını getir (Public - herkes görebilir)
+ * @access Private
+ */
+router.get("/sitter/:id", verifyToken, async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    if (!id) {
+      throw new CustomError(
+        Enum.HTTP_CODES.BAD_REQUEST,
+        "Bakıcı ID gerekli",
+        "ID parametresi eksik"
+      );
+    }
+
+    // Sitter profilini getir
+    const { data: sitterData, error: sitterError } = await supabase
+      .from("pet_sitter_profiles")
+      .select(
+        `
+        id,
+        display_name,
+        bio,
+        experience_years,
+        logo_url,
+        cover_image_url,
+        phone_number,
+        instagram_url,
+        is_available,
+        created_at,
+        updated_at
+      `
+      )
+      .eq("id", id)
+      .eq("is_available", true)
+      .single();
+
+    if (sitterError || !sitterData) {
+      throw new CustomError(
+        Enum.HTTP_CODES.NOT_FOUND,
+        "Bakıcı bulunamadı",
+        sitterError?.message || "İstenen bakıcı bulunamadı"
+      );
+    }
+
+    const successResponse = Response.successResponse(Enum.HTTP_CODES.OK, {
+      message: "Bakıcı detayı başarıyla getirildi",
+      data: sitterData,
     });
 
     res.status(successResponse.code).json(successResponse);
