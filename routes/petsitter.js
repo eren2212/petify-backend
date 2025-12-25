@@ -286,7 +286,7 @@ router.post(
       // 2. Mevcut logo kontrolü
       const { data: petSitterProfile, error: fetchError } = await supabase
         .from("pet_sitter_profiles")
-        .select("profile_image_url")
+        .select("logo_url")
         .eq("user_role_id", roleData.id)
         .single();
 
@@ -299,8 +299,8 @@ router.post(
       }
 
       // 3. Eski logo varsa sil
-      if (petSitterProfile.profile_image_url) {
-        const oldFilePath = petSitterProfile.profile_image_url;
+      if (petSitterProfile.logo_url) {
+        const oldFilePath = petSitterProfile.logo_url;
         const { error: deleteError } = await supabase.storage
           .from("petsitterprofiles")
           .remove([oldFilePath]);
@@ -334,7 +334,7 @@ router.post(
       // 5. Database güncelle
       const { data: updateData, error: updateError } = await supabase
         .from("pet_sitter_profiles")
-        .update({ profile_image_url: fileName })
+        .update({ logo_url: fileName })
         .eq("user_role_id", roleData.id)
         .select()
         .single();
@@ -352,7 +352,7 @@ router.post(
 
       const response = Response.successResponse(Enum.HTTP_CODES.OK, {
         message: "Pet sitter profile image updated successfully",
-        profile_image_url: fileName,
+        logo_url: fileName,
         petSitterProfile: updateData,
       });
 
@@ -455,7 +455,7 @@ router.delete("/profile/image", verifyToken, async (req, res) => {
     // 2. Mevcut logo_url'i al
     const { data: petSitterProfile, error: fetchError } = await supabase
       .from("pet_sitter_profiles")
-      .select("profile_image_url")
+      .select("logo_url")
       .eq("user_role_id", roleData.id)
       .single();
 
@@ -468,7 +468,7 @@ router.delete("/profile/image", verifyToken, async (req, res) => {
     }
 
     // 3. Logo yoksa hata ver
-    if (!petSitterProfile.profile_image_url) {
+    if (!petSitterProfile.logo_url) {
       throw new CustomError(
         Enum.HTTP_CODES.BAD_REQUEST,
         "Pet sitter profile image not found",
@@ -476,7 +476,7 @@ router.delete("/profile/image", verifyToken, async (req, res) => {
       );
     }
 
-    const profileImagePath = petSitterProfile.profile_image_url;
+    const profileImagePath = petSitterProfile.logo_url;
 
     // 4. Storage'dan sil
     const { error: storageError } = await supabase.storage
@@ -493,7 +493,7 @@ router.delete("/profile/image", verifyToken, async (req, res) => {
     // 5. Database'de null yap
     const { data: updatedProfile, error: updateError } = await supabase
       .from("pet_sitter_profiles")
-      .update({ profile_image_url: null })
+      .update({ logo_url: null })
       .eq("user_role_id", roleData.id)
       .select()
       .single();
