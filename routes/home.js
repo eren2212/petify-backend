@@ -474,6 +474,142 @@ router.get("/shop/:id", verifyToken, async (req, res) => {
 });
 
 /**
+ * @route GET /home/clinic/:clinicId/services
+ * @desc Kliniğin hizmetlerini getir (Public - herkes görebilir)
+ * @access Private
+ */
+router.get("/clinic/:clinicId/services", verifyToken, async (req, res) => {
+  try {
+    const { clinicId } = req.params;
+
+    if (!clinicId) {
+      throw new CustomError(
+        Enum.HTTP_CODES.BAD_REQUEST,
+        "Klinik ID gerekli",
+        "ID parametresi eksik"
+      );
+    }
+
+    // Kliniğin hizmetlerini getir
+    const { data: servicesData, error: servicesError } = await supabase
+      .from("clinic_services")
+      .select(
+        "*, clinic_service_categories!inner(id, name, name_tr, icon_url, description)"
+      )
+      .eq("clinic_profile_id", clinicId)
+      .eq("is_active", true)
+      .order("created_at", { ascending: false });
+
+    if (servicesError) {
+      throw new CustomError(
+        Enum.HTTP_CODES.BAD_REQUEST,
+        "Hizmetler getirilirken bir hata oluştu",
+        servicesError.message
+      );
+    }
+
+    const successResponse = Response.successResponse(Enum.HTTP_CODES.OK, {
+      message: "Hizmetler başarıyla getirildi",
+      data: servicesData || [],
+      total: (servicesData || []).length,
+    });
+
+    res.status(successResponse.code).json(successResponse);
+  } catch (error) {
+    const errorResponse = Response.errorResponse(error);
+    res.status(errorResponse.code).json(errorResponse);
+  }
+});
+
+/**
+ * @route GET /home/clinic/:clinicId/doctors
+ * @desc Kliniğin doktorlarını getir (Public - herkes görebilir)
+ * @access Private
+ */
+router.get("/clinic/:clinicId/doctors", verifyToken, async (req, res) => {
+  try {
+    const { clinicId } = req.params;
+
+    if (!clinicId) {
+      throw new CustomError(
+        Enum.HTTP_CODES.BAD_REQUEST,
+        "Klinik ID gerekli",
+        "ID parametresi eksik"
+      );
+    }
+
+    // Kliniğin doktorlarını getir
+    const { data: doctorsData, error: doctorsError } = await supabase
+      .from("clinic_veterinarians")
+      .select("*")
+      .eq("clinic_profile_id", clinicId)
+      .order("created_at", { ascending: false });
+
+    if (doctorsError) {
+      throw new CustomError(
+        Enum.HTTP_CODES.BAD_REQUEST,
+        "Doktorlar getirilirken bir hata oluştu",
+        doctorsError.message
+      );
+    }
+
+    const successResponse = Response.successResponse(Enum.HTTP_CODES.OK, {
+      message: "Doktorlar başarıyla getirildi",
+      data: doctorsData || [],
+      total: (doctorsData || []).length,
+    });
+
+    res.status(successResponse.code).json(successResponse);
+  } catch (error) {
+    const errorResponse = Response.errorResponse(error);
+    res.status(errorResponse.code).json(errorResponse);
+  }
+});
+
+/**
+ * @route GET /home/clinic/:clinicId/doctors/:doctorId
+ * @desc Kliniğin doktor detayını getir (Public - herkes görebilir)
+ * @access Private
+ */
+router.get(
+  "/clinic/:clinicId/doctor/:doctorId",
+  verifyToken,
+  async (req, res) => {
+    try {
+      const { clinicId, doctorId } = req.params;
+      if (!clinicId || !doctorId) {
+        throw new CustomError(
+          Enum.HTTP_CODES.BAD_REQUEST,
+          "Klinik ID ve Doktor ID gerekli",
+          "ID parametreleri eksik"
+        );
+      }
+      const { data: doctorData, error: doctorError } = await supabase
+        .from("clinic_veterinarians")
+        .select("*")
+        .eq("id", doctorId)
+        .eq("clinic_profile_id", clinicId)
+        .single();
+      if (doctorError || !doctorData) {
+        throw new CustomError(
+          Enum.HTTP_CODES.NOT_FOUND,
+          "Doktor bulunamadı",
+          doctorError?.message || "İstenen doktor bulunamadı"
+        );
+      }
+      const successResponse = Response.successResponse(Enum.HTTP_CODES.OK, {
+        message: "Doktor detayı başarıyla getirildi",
+        data: doctorData,
+      });
+      res.status(successResponse.code).json(successResponse);
+    } catch (error) {
+      const errorResponse = Response.errorResponse(error);
+      res.status(errorResponse.code).json(errorResponse);
+    }
+  }
+);
+
+/**
  * @route GET /home/sitter/:id
  * @desc Pet sitter detayını getir (Public - herkes görebilir)
  * @access Private
