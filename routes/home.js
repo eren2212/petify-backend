@@ -1123,4 +1123,52 @@ router.get("/images/lost-pet/:filename", async (req, res) => {
   }
 });
 
+/**
+ * @route GET /home/sitter/:id/services
+ * @desc Pet sitter hizmetlerini getir (Public - herkes görebilir)
+ * @access Private
+ */
+router.get("/sitter/:id/services", verifyToken, async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    if (!id) {
+      throw new CustomError(
+        Enum.HTTP_CODES.BAD_REQUEST,
+        "Klinik ID gerekli",
+        "ID parametresi eksik"
+      );
+    }
+
+    // Kliniğin hizmetlerini getir
+    const { data: servicesData, error: servicesError } = await supabase
+      .from("pet_sitter_services")
+      .select(
+        "*, pet_sitter_service_categories!inner(id, name, name_tr, icon_url, description)"
+      )
+      .eq("pet_sitter_profile_id", id)
+      .eq("is_active", true)
+      .order("created_at", { ascending: false });
+
+    if (servicesError) {
+      throw new CustomError(
+        Enum.HTTP_CODES.BAD_REQUEST,
+        "Hizmetler getirilirken bir hata oluştu",
+        servicesError.message
+      );
+    }
+
+    const successResponse = Response.successResponse(Enum.HTTP_CODES.OK, {
+      message: "Hizmetler başarıyla getirildi",
+      data: servicesData || [],
+      total: (servicesData || []).length,
+    });
+
+    res.status(successResponse.code).json(successResponse);
+  } catch (error) {
+    const errorResponse = Response.errorResponse(error);
+    res.status(errorResponse.code).json(errorResponse);
+  }
+});
+
 module.exports = router;
