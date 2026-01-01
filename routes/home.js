@@ -235,19 +235,17 @@ router.get("/sitters", verifyToken, async (req, res) => {
       .select(
         `
         id,
-        sitter_name,
-        description,
-        logo_url,
-        address,
-        latitude,
-        longitude,
-        phone_number,
+        display_name,
+        bio,
         experience_years,
-        hourly_rate,
+        logo_url,
+        phone_number,
+        instagram_url,
+        is_available,
         created_at
       `
       )
-      .eq("is_active", true)
+      .eq("is_available", true)
       .order("created_at", { ascending: false })
       .limit(10);
 
@@ -699,6 +697,54 @@ router.get("/sitter/:id", verifyToken, async (req, res) => {
     const successResponse = Response.successResponse(Enum.HTTP_CODES.OK, {
       message: "Bakıcı detayı başarıyla getirildi",
       data: sitterData,
+    });
+
+    res.status(successResponse.code).json(successResponse);
+  } catch (error) {
+    const errorResponse = Response.errorResponse(error);
+    res.status(errorResponse.code).json(errorResponse);
+  }
+});
+
+/**
+ * @route GET /home/sitter/:id/services
+ * @desc Pet sitter hizmetlerini getir (Public - herkes görebilir)
+ * @access Private
+ */
+router.get("/sitter/:id/services", verifyToken, async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    if (!id) {
+      throw new CustomError(
+        Enum.HTTP_CODES.BAD_REQUEST,
+        "Klinik ID gerekli",
+        "ID parametresi eksik"
+      );
+    }
+
+    // Kliniğin hizmetlerini getir
+    const { data: servicesData, error: servicesError } = await supabase
+      .from("pet_sitter_services")
+      .select(
+        "*, pet_sitter_service_categories!inner(id, name, name_tr, icon_url, description)"
+      )
+      .eq("pet_sitter_profile_id", id)
+      .eq("is_active", true)
+      .order("created_at", { ascending: false });
+
+    if (servicesError) {
+      throw new CustomError(
+        Enum.HTTP_CODES.BAD_REQUEST,
+        "Hizmetler getirilirken bir hata oluştu",
+        servicesError.message
+      );
+    }
+
+    const successResponse = Response.successResponse(Enum.HTTP_CODES.OK, {
+      message: "Hizmetler başarıyla getirildi",
+      data: servicesData || [],
+      total: (servicesData || []).length,
     });
 
     res.status(successResponse.code).json(successResponse);
