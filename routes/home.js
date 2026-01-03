@@ -273,6 +273,132 @@ router.get("/sitters", verifyToken, async (req, res) => {
 });
 
 /**
+ * @route GET /home/shops
+ * @desc Ana sayfa için rastgele pet mağaza'ları getir
+ * @access Private
+ */
+router.get("/shops", verifyToken, async (req, res) => {
+  try {
+    // PostgreSQL RANDOM() ile rastgele 10 bakıcı seç
+    const { data, error } = await supabase
+      .from("pet_shop_profiles")
+      .select(
+        `
+        id,
+        shop_name,
+        description,
+        address,
+        latitude,
+        longitude,
+        phone_number,
+        email,
+        website_url,
+        instagram_url,
+        logo_url,
+        cover_image_url,
+        working_hours,
+        created_at
+      `
+      )
+      .order("created_at", { ascending: false })
+      .limit(10);
+
+    if (error) {
+      throw new CustomError(
+        Enum.HTTP_CODES.BAD_REQUEST,
+        "Mağazalar getirilirken bir hata oluştu",
+        error.message
+      );
+    }
+
+    // Rastgele sıralama için JavaScript ile shuffle
+    const shuffledData = (data || []).sort(() => Math.random() - 0.5);
+
+    const successResponse = Response.successResponse(Enum.HTTP_CODES.OK, {
+      message: "Mağazalar başarıyla getirildi",
+      data: shuffledData,
+    });
+
+    res.status(successResponse.code).json(successResponse);
+  } catch (error) {
+    const errorResponse = Response.errorResponse(error);
+    res.status(errorResponse.code).json(errorResponse);
+  }
+});
+
+/**
+ * @route GET /home/shops/:id/products
+ * @desc Mağazanın ürünlerini getir (Public - herkes görebilir)
+ * @access Private
+ */
+router.get("/shops/:id/products", verifyToken, async (req, res) => {
+  try {
+    const { id } = req.params;
+    if (!id) {
+      throw new CustomError(
+        Enum.HTTP_CODES.BAD_REQUEST,
+        "Mağaza ID gerekli",
+        "ID parametresi eksik"
+      );
+    }
+
+    // Mağazanın ürünlerini getir (aktif ve stokta olanlar)
+    const { data: productsData, error: productsError } = await supabase
+      .from("products")
+      .select(
+        `
+        id,
+        name,
+        description,
+        image_url,
+        price,
+        stock_quantity,
+        weight_kg,
+        age_group,
+        low_stock_threshold,
+        is_featured,
+        created_at,
+        updated_at,
+        product_categories!inner(id, name, name_tr),
+        pet_types!inner(id, name, name_tr)
+      `
+      )
+      .eq("pet_shop_profile_id", id)
+      .eq("is_active", true)
+      .order("created_at", { ascending: false });
+
+    if (productsError) {
+      throw new CustomError(
+        Enum.HTTP_CODES.BAD_REQUEST,
+        "Ürünler getirilirken bir hata oluştu",
+        productsError.message
+      );
+    }
+
+    // Eğer ürün yoksa boş array döndür
+    if (!productsData || productsData.length === 0) {
+      const successResponse = Response.successResponse(Enum.HTTP_CODES.OK, {
+        message: "Ürünler başarıyla getirildi",
+        data: [],
+        total: 0,
+      });
+      return res.status(successResponse.code).json(successResponse);
+    }
+
+    const successResponse = Response.successResponse(Enum.HTTP_CODES.OK, {
+      message: "Ürünler başarıyla getirildi",
+      data: productsData,
+      total: productsData.length,
+    });
+
+    res.status(successResponse.code).json(successResponse);
+  } catch (error) {
+    const errorResponse = Response.errorResponse(error);
+    res.status(errorResponse.code).json(errorResponse);
+  }
+});
+
+/**
  * @route GET /home/clinic/:id
  * @desc Klinik detayını getir (Public - herkes görebilir)
  * @access Private
@@ -872,7 +998,7 @@ router.get("/images/product/:filename", async (req, res) => {
 
     // Supabase Storage'dan dosyayı download et
     const { data, error } = await supabase.storage
-      .from("productimages")
+      .from("products")
       .download(filename);
 
     if (error || !data) {
