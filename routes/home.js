@@ -976,6 +976,62 @@ router.get("/lost-pets", verifyToken, async (req, res) => {
   }
 });
 
+router.get("/adoption-pets", verifyToken, async (req, res) => {
+  try {
+    const { data: adoptionPetsData, error: adoptionPetsError } = await supabase
+      .from("adoption_listings")
+      .select("*")
+      .eq("is_active", true)
+      .eq("status", "active")
+      .order("created_at", { ascending: false })
+      .limit(3);
+    if (adoptionPetsError) {
+      throw new CustomError(
+        Enum.HTTP_CODES.BAD_REQUEST,
+        "Sahiplenme ilanları getirilirken bir hata oluştu",
+        adoptionPetsError.message
+      );
+    }
+    if (!adoptionPetsData || adoptionPetsData.length === 0) {
+      const successResponse = Response.successResponse(Enum.HTTP_CODES.OK, {
+        message: "Sahiplenme ilanları başarıyla getirildi",
+        data: [],
+        total_count: 0,
+      });
+      return res.status(successResponse.code).json(successResponse);
+    }
+    const listingIds = adoptionPetsData.map((listing) => listing.id);
+    const { data: profileImages, error: imagesError } = await supabase
+      .from("profile_images")
+      .select("profile_id, image_url")
+      .in("profile_id", listingIds)
+      .eq("profile_type", "adoption_pet")
+      .eq("is_active", true);
+    const imageMap = {};
+    if (profileImages && !imagesError) {
+      profileImages.forEach((img) => {
+        if (!imageMap[img.profile_id]) {
+          imageMap[img.profile_id] = img.image_url;
+        }
+      });
+    }
+    const listingsWithImages = adoptionPetsData.map((listing) => ({
+      ...listing,
+      image_url: imageMap[listing.id] || null,
+    }));
+
+    const successResponse = Response.successResponse(Enum.HTTP_CODES.OK, {
+      message: "Kayıp hayvan ilanları başarıyla getirildi",
+      data: listingsWithImages,
+      total_count: listingsWithImages.length,
+    });
+    return res.status(successResponse.code).json(successResponse);
+  } catch (error) {
+    const errorResponse = Response.errorResponse(error);
+    return res.status(errorResponse.code).json(errorResponse);
+  }
+});
+
 // ==================== IMAGE SERVING ENDPOINTS ====================
 
 /**
