@@ -43,76 +43,159 @@ router.get("/banners", verifyToken, async (req, res) => {
 
 /**
  * @route GET /home/featured-products
- * @desc Ana sayfa için rastgele ürünler getir
+ * @desc Ana sayfa için rastgele ürünler getir (pagination destekli)
  * @access Private
+ * @query page - Sayfa numarası (default: 1)
+ * @query limit - Sayfa başına ürün sayısı (default: 10)
  */
 router.get("/featured-products", verifyToken, async (req, res) => {
   try {
-    // Rastgele 10 aktif ürün seç (stokta olan)
-    const { data, error } = await supabase.rpc("get_random_products", {
-      limit_count: 10,
-    });
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 10;
 
-    if (error) {
-      // RPC fonksiyonu yoksa fallback olarak normal query kullan
-      const { data: fallbackData, error: fallbackError } = await supabase
-        .from("products")
-        .select(
+    // Pagination için offset hesapla
+    const from = (page - 1) * limit;
+    const to = from + limit - 1;
+
+    // Toplam ürün sayısını al
+    const { count, error: countError } = await supabase
+      .from("products")
+      .select("*", { count: "exact", head: true })
+      .eq("is_active", true)
+      .gt("stock_quantity", 0);
+
+    if (countError) {
+      throw new CustomError(
+        Enum.HTTP_CODES.BAD_REQUEST,
+        "Ürün sayısı alınırken hata oluştu",
+        countError.message
+      );
+    }
+
+    // Page 1 için rastgele ürünler, diğer sayfalar için sıralı ürünler
+    if (page === 1) {
+      // Ana sayfa için rastgele ürünler
+      const { data, error } = await supabase.rpc("get_random_products", {
+        limit_count: limit,
+      });
+
+      if (error) {
+        // RPC fonksiyonu yoksa fallback olarak normal query kullan
+        const { data: fallbackData, error: fallbackError } = await supabase
+          .from("products")
+          .select(
+            `
+            id,
+            name,
+            description,
+            price,
+            stock_quantity,
+            is_featured,
+            created_at,
+            image_url
           `
-          id,
-          name,
-          description,
-          price,
-          stock_quantity,
-          is_featured,
-          created_at,
-          product_images (
-            image_url,
-            display_order
-          ),
-          pet_shop_profiles (
-            shop_name,
-            logo_url
           )
-        `
-        )
-        .eq("is_active", true)
-        .gt("stock_quantity", 0)
-        .order("created_at", { ascending: false })
-        .limit(10);
+          .eq("is_active", true)
+          .gt("stock_quantity", 0)
+          .order("created_at", { ascending: false })
+          .range(from, to);
 
-      if (fallbackError) {
-        throw new CustomError(
-          Enum.HTTP_CODES.BAD_REQUEST,
-          "Ürünler getirilirken bir hata oluştu",
-          fallbackError.message
-        );
+        if (fallbackError) {
+          throw new CustomError(
+            Enum.HTTP_CODES.BAD_REQUEST,
+            "Ürünler getirilirken bir hata oluştu",
+            fallbackError.message
+          );
+        }
+
+        const formattedData = (fallbackData || []).map((product) => ({
+          id: product.id,
+          name: product.name,
+          description: product.description,
+          price: product.price,
+          stock_quantity: product.stock_quantity,
+          is_featured: product.is_featured,
+          image_url: product.image_url || null,
+        }));
+
+        const successResponse = Response.successResponse(Enum.HTTP_CODES.OK, {
+          message: "Ürünler başarıyla getirildi",
+          data: formattedData,
+          pagination: {
+            page,
+            limit,
+            total: count || 0,
+            totalPages: Math.ceil((count || 0) / limit),
+            hasMore: to < (count || 0) - 1,
+          },
+        });
+
+        return res.status(successResponse.code).json(successResponse);
       }
-
-      // Her ürün için ilk resmi al
-      const formattedData = (fallbackData || []).map((product) => ({
-        id: product.id,
-        name: product.name,
-        description: product.description,
-        price: product.price,
-        stock_quantity: product.stock_quantity,
-        is_featured: product.is_featured,
-        image_url: product.product_images?.[0]?.image_url || null,
-        shop_name: product.pet_shop_profiles?.shop_name || "Bilinmeyen Mağaza",
-        shop_logo: product.pet_shop_profiles?.logo_url || null,
-      }));
 
       const successResponse = Response.successResponse(Enum.HTTP_CODES.OK, {
         message: "Ürünler başarıyla getirildi",
-        data: formattedData,
+        data: data || [],
+        pagination: {
+          page,
+          limit,
+          total: count || 0,
+          totalPages: Math.ceil((count || 0) / limit),
+          hasMore: to < (count || 0) - 1,
+        },
       });
 
       return res.status(successResponse.code).json(successResponse);
     }
 
+    // Diğer sayfalar için normal sıralama
+    const { data: productsData, error: productsError } = await supabase
+      .from("products")
+      .select(
+        `
+        id,
+        name,
+        description,
+        price,
+        stock_quantity,
+        is_featured,
+        created_at,
+        image_url
+      `
+      )
+      .eq("is_active", true)
+      .gt("stock_quantity", 0)
+      .order("created_at", { ascending: false })
+      .range(from, to);
+
+    if (productsError) {
+      throw new CustomError(
+        Enum.HTTP_CODES.BAD_REQUEST,
+        "Ürünler getirilirken bir hata oluştu",
+        productsError.message
+      );
+    }
+
+    const formattedData = (productsData || []).map((product) => ({
+      id: product.id,
+      name: product.name,
+      description: product.description,
+      price: product.price,
+      stock_quantity: product.stock_quantity,
+      is_featured: product.is_featured,
+      image_url: product.image_url || null,
+    }));
+
     const successResponse = Response.successResponse(Enum.HTTP_CODES.OK, {
       message: "Ürünler başarıyla getirildi",
-      data: data || [],
+      data: formattedData,
+      pagination: {
+        page,
+        limit,
+        total: count || 0,
+        totalPages: Math.ceil((count || 0) / limit),
+        hasMore: to < (count || 0) - 1,
+      },
     });
 
     res.status(successResponse.code).json(successResponse);
@@ -361,6 +444,7 @@ router.get("/shops/:id/products", verifyToken, async (req, res) => {
         updated_at,
         product_categories!inner(id, name, name_tr),
         pet_types!inner(id, name, name_tr)
+        pet_shop_profiles!inner(id, shop_name, logo_url)
       `
       )
       .eq("pet_shop_profile_id", id)
