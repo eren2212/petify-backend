@@ -503,7 +503,7 @@ router.get("/:id", async (req, res) => {
     const { data: productData, error: productError } = await supabase
       .from("products")
       .select(
-        "*, category:product_categories(id, name, name_tr), pet_type:pet_types(id, name, name_tr)"
+        "*, category:product_categories(id, name, name_tr), pet_type:pet_types(id, name, name_tr), pet_shop_profile:pet_shop_profiles(id, shop_name, logo_url)"
       )
       .eq("id", id)
       .single();
