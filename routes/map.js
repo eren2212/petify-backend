@@ -134,11 +134,10 @@ router.get("/nearby", verifyToken, async (req, res) => {
     if (requestedTypes.includes("lost_pet")) {
       try {
         const { data: lostPetData, error: lostPetError } = await supabase.rpc(
-          "get_lost_pets_nearby",
+          "get_nearby_pets",
           {
             user_lat: lat,
             user_lon: lon,
-            search_radius_meters: searchRadius,
           }
         );
 
@@ -202,7 +201,6 @@ router.get("/nearby", verifyToken, async (req, res) => {
           {
             user_lat: lat,
             user_lon: lon,
-            search_radius_meters: searchRadius,
           }
         );
 
