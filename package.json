@@ -14,10 +14,12 @@
     "ejs": "~2.6.1",
     "express": "~4.16.1",
     "http-errors": "~1.6.3",
+    "iyzipay": "^2.0.64",
     "morgan": "~1.9.1",
     "multer": "^2.0.2",
     "swagger-jsdoc": "^6.2.8",
     "swagger-ui-express": "^5.0.0",
+    "uuid": "^13.0.0",
     "zod": "^4.1.12"
   }
 }
