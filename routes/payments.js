@@ -138,8 +138,8 @@ router.post("/initialize", async (req, res) => {
       "💰 Basket items toplamı:",
       formattedBasketItems.reduce(
         (sum, item) => sum + parseFloat(item.price),
-        0
-      )
+        0,
+      ),
     );
 
     // ADIM 4: iyzico Request Hazırla
@@ -214,9 +214,10 @@ router.post("/initialize", async (req, res) => {
         .update({ iyzico_token: result.token }) // Schema: iyzico_token
         .eq("id", payment.id);
 
-      // React Native'e dön
+      // React Native'e dön - paymentPageUrl kullan (WebView için en iyi)
       res.json({
         status: "success",
+        paymentPageUrl: result.paymentPageUrl, // Direkt yüklenebilir URL
         htmlContent: result.checkoutFormContent,
         token: result.token,
       });
@@ -300,24 +301,93 @@ router.post("/callback", async (req, res) => {
         }
       }
 
-      // Frontend için HTML
+      // Frontend için HTML - WebView'ın success durumunu algılaması için URL değişikliği
+      console.log("🎯 Payment Callback Result:", {
+        isSuccess,
+        paymentStatus: result.paymentStatus,
+      });
+
       const htmlResponse = `
-                <!DOCTYPE html>
-                <html>
-                <head><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
-                <body style="display:flex;justify-content:center;align-items:center;height:100vh;">
-                    <h1 style="color:${isSuccess ? "green" : "red"}">
-                        ${isSuccess ? "Ödeme Başarılı!" : "Ödeme Başarısız!"}
-                    </h1>
-                </body>
-                </html>
-            `;
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <meta charset="utf-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1.0">
+          <style>
+            body {
+              display: flex;
+              flex-direction: column;
+              justify-content: center;
+              align-items: center;
+              height: 100vh;
+              margin: 0;
+              font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+              background: ${isSuccess ? "#f0fff4" : "#fff5f5"};
+            }
+            .icon { font-size: 64px; margin-bottom: 20px; }
+            h1 { color: ${isSuccess ? "#22c55e" : "#ef4444"}; margin: 0 0 10px 0; }
+            p { color: #666; margin: 0; }
+          </style>
+        </head>
+        <body>
+          <div class="icon">${isSuccess ? "✅" : "❌"}</div>
+          <h1>${isSuccess ? "Ödeme Başarılı!" : "Ödeme Başarısız"}</h1>
+          <p>${isSuccess ? "Siparişiniz alındı." : "Lütfen tekrar deneyin."}</p>
+          <script>
+            // WebView'ın bu değişikliği algılaması için URL'e success parametresi ekle
+            window.paymentSuccess = ${isSuccess};
+            // 1 saniye sonra URL değiştir (WebView navigation event tetikler)
+            setTimeout(() => {
+              window.location.href = '${process.env.PUBLIC_URL}/api/payments/result?success=${isSuccess}';
+            }, 1500);
+          </script>
+        </body>
+        </html>
+      `;
       res.send(htmlResponse);
     });
   } catch (error) {
     console.error(error);
     res.status(500).send("Hata");
   }
+});
+
+// --- 3. ENDPOINT: RESULT (WebView redirect için) ---
+router.get("/result", (req, res) => {
+  const { success } = req.query;
+  const isSuccess = success === "true";
+
+  console.log("📱 Payment Result Page:", { success, isSuccess });
+
+  res.send(`
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <style>
+        body {
+          display: flex;
+          flex-direction: column;
+          justify-content: center;
+          align-items: center;
+          height: 100vh;
+          margin: 0;
+          font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+          background: ${isSuccess ? "#f0fff4" : "#fff5f5"};
+        }
+        .icon { font-size: 80px; margin-bottom: 20px; }
+        h1 { color: ${isSuccess ? "#22c55e" : "#ef4444"}; margin: 0 0 10px 0; font-size: 24px; }
+        p { color: #666; margin: 0; font-size: 16px; }
+      </style>
+    </head>
+    <body>
+      <div class="icon">${isSuccess ? "✅" : "❌"}</div>
+      <h1>${isSuccess ? "Ödeme Başarılı!" : "Ödeme Başarısız"}</h1>
+      <p>${isSuccess ? "Siparişiniz alındı." : "Lütfen tekrar deneyin."}</p>
+    </body>
+    </html>
+  `);
 });
 
 module.exports = router;
