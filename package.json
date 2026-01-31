@@ -13,6 +13,7 @@
     "dotenv": "^17.2.2",
     "ejs": "~2.6.1",
     "express": "~4.16.1",
+    "firebase-admin": "^13.6.0",
     "http-errors": "~1.6.3",
     "iyzipay": "^2.0.64",
     "morgan": "~1.9.1",

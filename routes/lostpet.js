@@ -36,8 +36,20 @@ router.get("/detail/:id", verifyToken, async (req, res) => {
       throw new CustomError(
         Enum.HTTP_CODES.INT_SERVER_ERROR,
         "Kayıp hayvan ilanı bulunamadı",
-        error.message
+        error.message,
       );
+    }
+
+    // Fetch user role for the owner
+    const { data: userRole, error: roleError } = await supabase
+      .from("user_roles")
+      .select("id")
+      .eq("user_id", data.user_id)
+      .single();
+
+    // Attach user_roles to the response data to match frontend expectation
+    if (userRole) {
+      data.user_roles = userRole;
     }
 
     const successResponse = Response.successResponse(Enum.HTTP_CODES.OK, {
@@ -76,7 +88,7 @@ router.get("/my/listings", verifyToken, async (req, res) => {
       throw new CustomError(
         Enum.HTTP_CODES.INT_SERVER_ERROR,
         "Kayıp hayvan ilanları getirilirken hata oluştu",
-        listingsError.message
+        listingsError.message,
       );
     }
 
@@ -105,7 +117,7 @@ router.get("/my/listings", verifyToken, async (req, res) => {
       throw new CustomError(
         Enum.HTTP_CODES.INT_SERVER_ERROR,
         "Resimler getirilirken hata oluştu",
-        imagesError.message
+        imagesError.message,
       );
     }
 
@@ -169,7 +181,7 @@ router.put("/:id", verifyToken, async (req, res) => {
       throw new CustomError(
         Enum.HTTP_CODES.INT_SERVER_ERROR,
         "Kayıp hayvan ilanı bulunduğunda hata oluştu",
-        error.message
+        error.message,
       );
     }
     const successResponse = Response.successResponse(Enum.HTTP_CODES.OK, {
@@ -207,7 +219,7 @@ router.delete("/:id", verifyToken, async (req, res) => {
       throw new CustomError(
         Enum.HTTP_CODES.INT_SERVER_ERROR,
         "Kayıp hayvan ilanı silinirken hata oluştu",
-        error.message
+        error.message,
       );
     }
 
@@ -235,7 +247,7 @@ router.get("/image/:id", async (req, res) => {
       throw new CustomError(
         Enum.HTTP_CODES.BAD_REQUEST,
         "ID gerekli",
-        "ID gerekli"
+        "ID gerekli",
       );
     }
 
@@ -250,7 +262,7 @@ router.get("/image/:id", async (req, res) => {
       throw new CustomError(
         Enum.HTTP_CODES.INT_SERVER_ERROR,
         "Kayıp hayvan ilanı resmi getirilirken hata oluştu",
-        error.message
+        error.message,
       );
     }
     const { image_url } = data;
@@ -260,7 +272,7 @@ router.get("/image/:id", async (req, res) => {
       throw new CustomError(
         Enum.HTTP_CODES.BAD_REQUEST,
         "Geçersiz dosya adı",
-        "Dosya adı geçersiz karakterler içeriyor."
+        "Dosya adı geçersiz karakterler içeriyor.",
       );
     }
 
@@ -272,14 +284,14 @@ router.get("/image/:id", async (req, res) => {
       throw new CustomError(
         Enum.HTTP_CODES.INT_SERVER_ERROR,
         "Kayıp hayvan ilanı resmi getirilirken hata oluştu",
-        imageError.message
+        imageError.message,
       );
     }
     const contentType = image_url.endsWith(".png")
       ? "image/png"
       : image_url.endsWith(".webp")
-      ? "image/webp"
-      : "image/jpeg";
+        ? "image/webp"
+        : "image/jpeg";
 
     const arrayBuffer = await imageData.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
