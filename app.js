@@ -12,6 +12,7 @@ var swaggerUi = require("swagger-ui-express");
 var swaggerSpecs = require("./config/swagger");
 
 var indexRouter = require("./routes/index");
+var { startVaccinationReminderJob } = require("./jobs/vaccinationReminder");
 
 var app = express();
 
@@ -38,6 +39,9 @@ app.use(
 );
 
 app.use("/api", indexRouter);
+
+// Zamanlanmış job'ları başlat
+startVaccinationReminderJob();
 
 // catch 404 and forward to error handler
 app.use(function (req, res, next) {
