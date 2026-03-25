@@ -357,6 +357,90 @@ router.delete("/avatar", verifyToken, async (req, res) => {
 });
 
 /**
+ * @route PUT /profile/push-token
+ * @desc Push notification token'ını güncelle
+ * @access Private
+ */
+router.put("/push-token", verifyToken, async (req, res) => {
+  try {
+    const { push_token } = req.body;
+    const userId = req.user.id;
+
+    // Input validation
+    if (!push_token) {
+      throw new CustomError(
+        Enum.HTTP_CODES.BAD_REQUEST,
+        "Push token gerekli",
+        "push_token alanı boş olamaz"
+      );
+    }
+
+    // Push token'ı güncelle
+    const { data, error } = await supabase
+      .from("user_profiles")
+      .update({ push_token: push_token })
+      .eq("user_id", userId)
+      .select()
+      .single();
+
+    if (error) {
+      throw new CustomError(
+        Enum.HTTP_CODES.INT_SERVER_ERROR,
+        "Push token güncellenemedi",
+        error.message
+      );
+    }
+
+    const successResponse = Response.successResponse(Enum.HTTP_CODES.OK, {
+      message: "Push token başarıyla güncellendi",
+      profile: data,
+    });
+
+    res.status(successResponse.code).json(successResponse);
+  } catch (error) {
+    const errorResponse = Response.errorResponse(error);
+    res.status(errorResponse.code).json(errorResponse);
+  }
+});
+
+/**
+ * @route DELETE /profile/push-token
+ * @desc Push notification token'ını sil (logout için)
+ * @access Private
+ */
+router.delete("/push-token", verifyToken, async (req, res) => {
+  try {
+    const userId = req.user.id;
+
+    // Push token'ı null yap
+    const { data, error } = await supabase
+      .from("user_profiles")
+      .update({ push_token: null })
+      .eq("user_id", userId)
+      .select()
+      .single();
+
+    if (error) {
+      throw new CustomError(
+        Enum.HTTP_CODES.INT_SERVER_ERROR,
+        "Push token silinemedi",
+        error.message
+      );
+    }
+
+    const successResponse = Response.successResponse(Enum.HTTP_CODES.OK, {
+      message: "Push token başarıyla silindi",
+      profile: data,
+    });
+
+    res.status(successResponse.code).json(successResponse);
+  } catch (error) {
+    const errorResponse = Response.errorResponse(error);
+    res.status(errorResponse.code).json(errorResponse);
+  }
+});
+
+/**
  * @route POST /profile/pet/add
  * @desc Profile hayvan ekleme
  * @access Private

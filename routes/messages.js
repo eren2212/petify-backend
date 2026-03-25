@@ -84,7 +84,7 @@ router.post("/send", verifyToken, async (req, res) => {
           if (tokens.length > 0) {
             await NotificationService.sendPushNotification(
               tokens,
-              "Yeni Mesaj",
+              "Petify",
               lastMessageContent,
               { conversation_id: conversation_id, type: "NEW_MESSAGE" },
             );
