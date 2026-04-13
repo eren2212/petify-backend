@@ -505,6 +505,7 @@ router.get("/clinic/:id", verifyToken, async (req, res) => {
       .select(
         `
         id,
+        user_role_id,
         clinic_name,
         description,
         address,
@@ -568,6 +569,7 @@ router.get("/hotel/:id", verifyToken, async (req, res) => {
       .select(
         `
         id,
+        user_role_id,
         hotel_name,
         description,
         address,
@@ -682,6 +684,7 @@ router.get("/shop/:id", verifyToken, async (req, res) => {
       .select(
         `
         id,
+        user_role_id,
         shop_name,
         description,
         address,
@@ -880,6 +883,7 @@ router.get("/sitter/:id", verifyToken, async (req, res) => {
       .select(
         `
         id,
+        user_role_id,
         display_name,
         bio,
         experience_years,

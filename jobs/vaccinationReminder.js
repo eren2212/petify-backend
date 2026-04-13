@@ -122,6 +122,7 @@ async function sendVaccinationReminders() {
 function startVaccinationReminderJob() {
   // Her gün 09:00 TR saatinde çalışır
   // Format: saniye dakika saat gün ay haftagünü
+  // */5 * * * *
   cron.schedule(
     "0 9 * * *",
     () => {
